@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Open500 — native add-ons for the Akai MPC500</title>
-<meta name="description" content="Open500 adds new native pages to the Akai MPC500: Auto Chop and more, loaded from a WAV file. No hardware mod.">
+<meta name="description" content="Open500 adds new native pages to the Akai MPC500: Auto Chop, Trans-Chop, Auto Warp, Sample FX. Loaded from a WAV file, no hardware mod.">
 <style>
   :root {
     --bg: #141518; --panel: #1d1f24; --panel2: #25282e; --line: #33363d;
@@ -63,8 +63,8 @@
     <p class="tag">New native pages for the Akai MPC500, loaded from a WAV file.<br>No hardware mod, no soldering, fully reversible.</p>
     <p><span class="pill">MPC500 OS 1.31</span><span class="pill">free</span><span class="pill">open source</span></p>
     <p><a class="btn" href="#install">Install</a> &nbsp; <a class="btn ghost" href="#addons">See the add-ons</a></p>
-    <!-- TODO: replace with the 20 s video / GIF of Auto Chop running on the MPC500 -->
-    <div class="media">video: Auto Chop on the MPC500 (coming soon)</div>
+    <!-- TODO: replace with the 20-40 s video of the add-ons running on the MPC500 -->
+    <div class="media">video: Open500 on the MPC500 (coming soon)</div>
   </div>
 </header>
 
@@ -75,30 +75,56 @@
       you load them from the CompactFlash like any sample, and they show up in the <kbd>OTHER</kbd> menu as <b>native pages</b> —
       same fonts, same cursor, same wheel and <kbd>DO IT</kbd> / <kbd>CANCEL</kbd> as the original OS.</p>
     <p>Delete the add-on sample and it is gone. Reflash the original OS and your MPC is exactly as it came from Akai.</p>
+    <p>The add-ons use the MPC's own engine wherever they can (its time stretch, its sample editing, its pad playback), so what you hear in the preview is exactly what you get.</p>
   </div>
 </section>
 
 <section id="addons">
   <div class="wrap">
     <h2>Add-ons</h2>
+    <p class="muted">Every add-on works the same way: you hear the result on the pads <b>before</b> you commit,
+      <kbd>DO IT</kbd> asks for confirmation, and your original sample is never modified.</p>
     <div class="grid">
       <div class="card">
         <div class="status ok">available</div>
         <h3>Auto Chop</h3>
-        <p>Chop a loop by BPM and lay the slices on the pads, in one step.</p>
-        <div class="lcd">BREAK01
+        <p>Chop a loop into equal slices by BPM and lay them on the pads.</p>
+        <div class="lcd">BREAK01         
 B 93.0 N  8 P  1</div>
-        <p class="muted">Pick the sample with the wheel, set the tempo (<b>B</b>), the number of slices (<b>N</b>) and the first pad (<b>P</b>),
-          press <kbd>DO IT</kbd>. The slices are new samples, assigned to the pads of the current program. Shortcut: <kbd>SHIFT</kbd>+<kbd>STOP</kbd>.</p>
+        <p class="muted">Set the tempo (<b>B</b>) and the number of slices (<b>N</b>). Pad 1 plays slice 1, pad 2 slice 2&hellip;
+          <kbd>DO IT</kbd>, then hit the pad where the slices should start. Slices are set to mono, all in one mute group.
+          Shortcut: <kbd>SHIFT</kbd>+<kbd>STOP</kbd>.</p>
         <p><a class="btn" href="addons/CHOPAGE.WAV" download>Download CHOPAGE.WAV</a></p>
       </div>
-      <div class="card soon">
-        <div class="status soon">coming soon</div>
+      <div class="card">
+        <div class="status ok">available</div>
+        <h3>Trans-Chop</h3>
+        <p>Chop on the hits: finds the transients and puts every hit on its own pad.</p>
+        <div class="lcd">BREAK01         
+SENS50 P 1 N 12 </div>
+        <p class="muted">Turn <b>SENS</b> up to catch more hits (<b>N</b> shows how many). Cuts land a few milliseconds before each
+          hit so attacks stay intact. Audition every slice on the pads, <kbd>DO IT</kbd>, hit the first pad. Mono, one mute group.</p>
+        <p><a class="btn" href="addons/TRANSCHP.WAV" download>Download TRANSCHP.WAV</a></p>
+      </div>
+      <div class="card">
+        <div class="status ok">available</div>
+        <h3>Auto Warp</h3>
+        <p>Put a loop in time with your beat, without changing its pitch.</p>
+        <div class="lcd">BREAK01         
+B 2 T 90.0 RTHM </div>
+        <p class="muted">It guesses how many bars the loop is (<b>B</b>) and takes your sequence tempo as the target (<b>T</b>),
+          then uses the MPC's own time stretch (RTHM / PERC / MUSC / VOX). Listen on the pads, <kbd>DO IT</kbd> to keep it.</p>
+        <p><a class="btn" href="addons/AUTOWARP.WAV" download>Download AUTOWARP.WAV</a></p>
+      </div>
+      <div class="card">
+        <div class="status ok">available</div>
         <h3>Sample FX</h3>
-        <p>Fades, silence trim and lo-fi (bit crush, downsample) written into the sample, with a live preview on the pads.</p>
-        <div class="lcd">BREAK01
-BITCRUSH AMT  8 </div>
-        <p class="muted">The original sample is never touched: the effect goes into a new copy.</p>
+        <p>Effects printed into the sample: fades, gain, bit crush, downsample, drive, silence trim.</p>
+        <div class="lcd">BREAK01         
+BITCRUSH AMT 75 </div>
+        <p class="muted">Pick the effect and the amount: the pads play the result while you turn the wheel.
+          <kbd>DO IT</kbd> saves it as a new sample.</p>
+        <p><a class="btn" href="addons/SAMPLEFX.WAV" download>Download SAMPLEFX.WAV</a></p>
       </div>
       <div class="card">
         <div class="status ok">required</div>
@@ -139,7 +165,7 @@ BITCRUSH AMT  8 </div>
       </li>
       <li>
         <h3>Load the add-ons</h3>
-        <p>Copy <code>HUB.WAV</code> and the add-ons (e.g. <code>CHOPAGE.WAV</code>) to the card. On the MPC, <kbd>LOAD</kbd> <code>HUB.WAV</code> first
+        <p>Copy <code>HUB.WAV</code> and the add-ons you want (<code>CHOPAGE.WAV</code>, <code>TRANSCHP.WAV</code>, <code>AUTOWARP.WAV</code>, <code>SAMPLEFX.WAV</code>) to the card. On the MPC, <kbd>LOAD</kbd> <code>HUB.WAV</code> first
           (the screen shows <code>LOADED hub</code>), then the add-ons (<code>LOADED &lt;name&gt;</code>).</p>
         <p>Open them from <kbd>MODE</kbd> → <kbd>OTHER</kbd>: the add-ons are listed after <i>Version</i>. Select one, press <kbd>DO IT</kbd>. <kbd>CANCEL</kbd> goes back.</p>
       </li>

@@ -12,7 +12,7 @@ ROOT = os.path.dirname(HERE)
 RE = os.path.join(ROOT, '..', 're_work')
 ORIG = os.path.join(RE, 'mpc500.bin')                                   # official OS 1.31 (checked against the Akai zip below)
 PATCHED = os.path.join(RE, 'release', 'v4_topmem', 'mpc500_loader.bin')  # loader v8, tested on the hardware
-ADDONS = [('HUB.WAV', 'release/v4_topmem/HUB.WAV'), ('CHOPAGE.WAV', 'release/v4_topmem/CHOPAGE.WAV')]
+ADDONS = [(n, 'release/v8_chops/' + n) for n in ('HUB.WAV', 'CHOPAGE.WAV', 'SAMPLEFX.WAV', 'AUTOWARP.WAV', 'TRANSCHP.WAV')]
 CRC_OFF, OS_HDR = 0x10010, 0x10000
 
 def main():

@@ -6,11 +6,13 @@ New native pages for the **Akai MPC500**, loaded from a WAV file. No hardware mo
 the Open500 loader in your browser. Nothing is uploaded, and this repository contains no Akai code.
 
 ## Add-ons
-| Add-on | Status | |
+| Add-on | File | |
 |---|---|---|
-| HUB | available | add-on manager, load it first (up to 4 add-ons at the same time) |
-| Auto Chop | available | chop a loop by BPM and lay the slices on the pads |
-| Sample FX | coming soon | fades, silence trim, lo-fi, with live preview on the pads |
+| HUB | `HUB.WAV` | add-on manager, load it first (up to 4 add-ons at the same time) |
+| Auto Chop | `CHOPAGE.WAV` | equal slices by BPM onto the pads; pad preview, hit the first pad, mono + one mute group |
+| Trans-Chop | `TRANSCHP.WAV` | slices on the transients (sensitivity), cut just before each hit; pad preview, hit the first pad |
+| Auto Warp | `AUTOWARP.WAV` | fit a loop to the sequence tempo with the MPC's own time stretch; bars guessed; pad preview |
+| Sample FX | `SAMPLEFX.WAV` | fades, gain, bit crush, downsample, drive, silence trim printed into a new sample; pad preview |
 
 ## How it works
 - The loader (1.3 KB) is written into an unused, all-zero area of the MPC500 OS 1.31 and hooked into the OS main
