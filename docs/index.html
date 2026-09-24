@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open500 — native add-ons for the Akai MPC500</title>
+<meta name="description" content="Open500 adds new native pages to the Akai MPC500: Auto Chop and more, loaded from a WAV file. No hardware mod.">
+<style>
+  :root {
+    --bg: #141518; --panel: #1d1f24; --panel2: #25282e; --line: #33363d;
+    --text: #e7e7ea; --muted: #9a9ca3; --red: #d8342c; --red2: #ff4a3d;
+    --lcd: #b9d27a; --lcdtext: #1f2a12; --ok: #6cc070; --warn: #e0a84a;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  a { color: var(--red2); }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 22px; }
+  header { padding: 64px 0 40px; border-bottom: 1px solid var(--line); }
+  .logo { font: 800 56px/1 var(--mono); letter-spacing: -2px; margin: 0; }
+  .logo span { color: var(--red); }
+  .tag { font-size: 22px; color: var(--muted); margin: 14px 0 26px; max-width: 640px; }
+  .pill { display: inline-block; font: 600 13px var(--mono); padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); margin-right: 6px; }
+  .btn { display: inline-block; background: var(--red); color: #fff; text-decoration: none; font-weight: 700; padding: 12px 20px; border-radius: 8px; border: 0; cursor: pointer; font-size: 16px; }
+  .btn:hover { background: var(--red2); }
+  .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); }
+  .btn[disabled] { opacity: .4; cursor: not-allowed; }
+  section { padding: 48px 0; border-bottom: 1px solid var(--line); }
+  h2 { font-size: 28px; margin: 0 0 18px; }
+  h3 { margin: 0 0 8px; font-size: 20px; }
+  .muted { color: var(--muted); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 22px; }
+  .card.soon { opacity: .75; }
+  .status { font: 700 12px var(--mono); text-transform: uppercase; letter-spacing: 1px; }
+  .status.ok { color: var(--ok); } .status.soon { color: var(--warn); }
+  /* 16x2 LCD mock-up of the MPC500 display */
+  .lcd { display: inline-block; background: var(--lcd); color: var(--lcdtext); font: 700 18px/1.25 var(--mono); padding: 10px 14px; border-radius: 6px;
+         border: 6px solid #0d0e10; box-shadow: inset 0 0 12px rgba(0,0,0,.25); white-space: pre; margin: 12px 0; }
+  .media { background: var(--panel2); border: 1px dashed var(--line); border-radius: 12px; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; color: var(--muted); margin-top: 28px; }
+  ol.steps { counter-reset: s; list-style: none; padding: 0; margin: 0; }
+  ol.steps > li { counter-increment: s; position: relative; padding: 0 0 26px 54px; }
+  ol.steps > li::before { content: counter(s); position: absolute; left: 0; top: -2px; width: 36px; height: 36px; border-radius: 50%; background: var(--red);
+                         color: #fff; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  kbd { font: 700 13px var(--mono); background: var(--panel2); border: 1px solid var(--line); border-bottom-width: 3px; border-radius: 5px; padding: 1px 7px; }
+  code { font-family: var(--mono); font-size: .9em; background: var(--panel2); padding: 1px 6px; border-radius: 4px; }
+  #drop { border: 2px dashed var(--line); border-radius: 12px; padding: 28px; text-align: center; cursor: pointer; background: var(--panel); transition: .15s; }
+  #drop.over { border-color: var(--red); background: var(--panel2); }
+  #log { font: 14px/1.7 var(--mono); margin: 14px 0 0; padding: 0; list-style: none; }
+  #log li.ok::before { content: "✓ "; color: var(--ok); } #log li.err::before { content: "✗ "; color: var(--red2); }
+  #log li.err { color: var(--red2); }
+  .note { border-left: 3px solid var(--warn); background: var(--panel); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 18px 0; }
+  details { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; margin-bottom: 10px; }
+  summary { cursor: pointer; font-weight: 700; }
+  footer { padding: 34px 0 60px; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1 class="logo">Open<span>500</span></h1>
+    <p class="tag">New native pages for the Akai MPC500, loaded from a WAV file.<br>No hardware mod, no soldering, fully reversible.</p>
+    <p><span class="pill">MPC500 OS 1.31</span><span class="pill">free</span><span class="pill">open source</span></p>
+    <p><a class="btn" href="#install">Install</a> &nbsp; <a class="btn ghost" href="#addons">See the add-ons</a></p>
+    <!-- TODO: replace with the 20 s video / GIF of Auto Chop running on the MPC500 -->
+    <div class="media">video: Auto Chop on the MPC500 (coming soon)</div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>What is it?</h2>
+    <p>Open500 is a small loader added to the official MPC500 operating system. Once it is installed, <b>add-ons are just WAV files</b>:
+      you load them from the CompactFlash like any sample, and they show up in the <kbd>OTHER</kbd> menu as <b>native pages</b> —
+      same fonts, same cursor, same wheel and <kbd>DO IT</kbd> / <kbd>CANCEL</kbd> as the original OS.</p>
+    <p>Delete the add-on sample and it is gone. Reflash the original OS and your MPC is exactly as it came from Akai.</p>
+  </div>
+</section>
+
+<section id="addons">
+  <div class="wrap">
+    <h2>Add-ons</h2>
+    <div class="grid">
+      <div class="card">
+        <div class="status ok">available</div>
+        <h3>Auto Chop</h3>
+        <p>Chop a loop by BPM and lay the slices on the pads, in one step.</p>
+        <div class="lcd">BREAK01
+B 93.0 N  8 P  1</div>
+        <p class="muted">Pick the sample with the wheel, set the tempo (<b>B</b>), the number of slices (<b>N</b>) and the first pad (<b>P</b>),
+          press <kbd>DO IT</kbd>. The slices are new samples, assigned to the pads of the current program. Shortcut: <kbd>SHIFT</kbd>+<kbd>STOP</kbd>.</p>
+        <p><a class="btn" href="addons/CHOPAGE.WAV" download>Download CHOPAGE.WAV</a></p>
+      </div>
+      <div class="card soon">
+        <div class="status soon">coming soon</div>
+        <h3>Sample FX</h3>
+        <p>Fades, silence trim and lo-fi (bit crush, downsample) written into the sample, with a live preview on the pads.</p>
+        <div class="lcd">BREAK01
+BITCRUSH AMT  8 </div>
+        <p class="muted">The original sample is never touched: the effect goes into a new copy.</p>
+      </div>
+      <div class="card">
+        <div class="status ok">required</div>
+        <h3>HUB</h3>
+        <p>The add-on manager. Load it first: it installs every add-on you load after it (up to 4 at the same time) and adds them to the <kbd>OTHER</kbd> menu.</p>
+        <p><a class="btn" href="addons/HUB.WAV" download>Download HUB.WAV</a></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <h2>Install</h2>
+    <p class="muted">Once. Takes about five minutes. You need a CompactFlash card and a computer.</p>
+    <ol class="steps">
+      <li>
+        <h3>Get the official OS 1.31</h3>
+        <p>Download the MPC500 OS 1.31 from Akai Professional and unzip it: you get <code>mpc500.bin</code>.</p>
+        <p><a class="btn ghost" href="https://cdn.inmusicbrands.com/akai/mpc500/mpc500_v131_00.zip_fa96e4bc5f8d9fd7489ed436c5a49743.zip">Download OS 1.31 from Akai (288 KB)</a></p>
+      </li>
+      <li>
+        <h3>Add Open500 to it</h3>
+        <p>Drop <code>mpc500.bin</code> here. It is patched <b>in your browser</b>: nothing is uploaded.</p>
+        <div id="drop">
+          <b>Drop mpc500.bin here</b> or click to choose it
+          <input id="file" type="file" accept=".bin" hidden>
+        </div>
+        <ul id="log"></ul>
+        <p><button id="save" class="btn" disabled>Download MPC500.bin</button></p>
+        <p class="muted">We never distribute Akai's firmware: this page only adds the Open500 loader (1.3 KB of our own code) to the file you provide,
+          checks that it is the untouched OS 1.31, and recomputes the checksum. The result is identical, byte for byte, to the firmware we tested.</p>
+      </li>
+      <li>
+        <h3>Flash it</h3>
+        <p>Copy <code>MPC500.bin</code> to the <b>root</b> of the CompactFlash card and insert it in the MPC500.
+          Hold <kbd>SHIFT</kbd> while you switch the MPC on, then press <kbd>REC</kbd> when the screen asks for it. Wait for the update to finish.</p>
+      </li>
+      <li>
+        <h3>Load the add-ons</h3>
+        <p>Copy <code>HUB.WAV</code> and the add-ons (e.g. <code>CHOPAGE.WAV</code>) to the card. On the MPC, <kbd>LOAD</kbd> <code>HUB.WAV</code> first
+          (the screen shows <code>LOADED hub</code>), then the add-ons (<code>LOADED &lt;name&gt;</code>).</p>
+        <p>Open them from <kbd>MODE</kbd> → <kbd>OTHER</kbd>: the add-ons are listed after <i>Version</i>. Select one, press <kbd>DO IT</kbd>. <kbd>CANCEL</kbd> goes back.</p>
+      </li>
+    </ol>
+    <div class="note">Add-ons live in memory like samples: after switching the MPC off, load <code>HUB.WAV</code> and the add-ons again
+      (tip: keep them in the same folder as your project).</div>
+  </div>
+</section>
+
+<section id="safety">
+  <div class="wrap">
+    <h2>Safety &amp; going back</h2>
+    <ul>
+      <li>Open500 does <b>not</b> touch the bootloader. If anything goes wrong, the MPC can always be updated again.</li>
+      <li>To remove it: flash the original <code>mpc500.bin</code> (OS 1.31) the same way (<kbd>SHIFT</kbd> at power on, then <kbd>REC</kbd>).</li>
+      <li>Open500 reserves the last 256 KB of sample memory for the add-ons.</li>
+      <li>Messages on the second line: <code>NO FREE SLOT</code> (4 add-ons already loaded), <code>BAD</code> (damaged WAV),
+        <code>LOW MEM: ADDONS!</code> (sample memory almost full). <kbd>SHIFT</kbd>+<kbd>ERASE</kbd> reloads the add-on manager.</li>
+    </ul>
+    <p class="muted">Tested on one MPC500 with OS 1.31. This is an unofficial project, not affiliated with Akai Professional or inMusic. Use at your own risk.</p>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <h2>FAQ</h2>
+    <details><summary>Does it work on the MPC1000 / MPC2500?</summary><p>Not yet. Open500 is built on a detailed study of the MPC500 OS 1.31; other models run different software.</p></details>
+    <details><summary>Does it change how my MPC500 works?</summary><p>No. Without add-ons loaded, the OS behaves like the original 1.31 — the only difference is 256 KB less sample memory, reserved for add-ons. Your programs, samples and sequences are not affected.</p></details>
+    <details><summary>Why do I have to provide the OS file myself?</summary><p>Because the operating system belongs to Akai. Open500 only publishes its own code, and your browser combines the two on your computer.</p></details>
+    <details><summary>Can I write my own add-on?</summary><p>Yes, that is the idea. The add-on SDK (Python, with an emulator to test add-ons before trying them on the MPC) will be documented in the repository.</p></details>
+    <details><summary>I have an idea for an add-on</summary><p>Great — open an issue in the repository and describe it.</p></details>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    Open500 — an independent project for the Akai MPC500. Akai Professional and MPC are trademarks of inMusic Brands.
+    <!-- TODO: link to the GitHub repository and contact -->
+  </div>
+</footer>
+
+<script src="patch.js"></script>
+<script src="patcher.js"></script>
+<script>
+(function () {
+  var drop = document.getElementById('drop'), input = document.getElementById('file'),
+      log = document.getElementById('log'), save = document.getElementById('save'), result = null;
+  function line(text, cls) { var li = document.createElement('li'); li.textContent = text; if (cls) li.className = cls; log.appendChild(li); }
+  function handle(file) {
+    log.innerHTML = ''; save.disabled = true; result = null;
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      line('Read ' + file.name + ' (' + reader.result.byteLength + ' bytes)', 'ok');
+      var r = Open500Patcher.applyPatch(reader.result, OPEN500_PATCH);
+      if (!r.ok) { line(r.error, 'err'); return; }
+      line('Original Akai OS 1.31 recognised', 'ok');
+      line('Open500 loader added, checksum updated', 'ok');
+      line('Result verified against the tested firmware', 'ok');
+      result = r.data; save.disabled = false;
+    };
+    reader.onerror = function () { line('Could not read the file.', 'err'); };
+    reader.readAsArrayBuffer(file);
+  }
+  drop.addEventListener('click', function () { input.click(); });
+  input.addEventListener('change', function () { handle(input.files[0]); });
+  drop.addEventListener('dragover', function (e) { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', function () { drop.classList.remove('over'); });
+  drop.addEventListener('drop', function (e) { e.preventDefault(); drop.classList.remove('over'); handle(e.dataTransfer.files[0]); });
+  save.addEventListener('click', function () {
+    if (!result) return;
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([result], { type: 'application/octet-stream' }));
+    a.download = 'MPC500.bin'; document.body.appendChild(a); a.click(); a.remove();
+  });
+})();
+</script>
+</body>
+</html>
