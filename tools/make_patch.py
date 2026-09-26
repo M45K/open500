@@ -11,8 +11,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 RE = os.path.join(ROOT, '..', 're_work')
 ORIG = os.path.join(RE, 'mpc500.bin')                                   # official OS 1.31 (checked against the Akai zip below)
-PATCHED = os.path.join(RE, 'release', 'v4_topmem', 'mpc500_loader.bin')  # loader v8, tested on the hardware
-ADDONS = [(n, 'release/v8_chops/' + n) for n in ('HUB.WAV', 'CHOPAGE.WAV', 'SAMPLEFX.WAV', 'AUTOWARP.WAV', 'TRANSCHP.WAV')]
+PATCHED = os.path.join(RE, 'release', 'v9_hub8', 'mpc500_loader.bin')  # loader v9 (8 slots, autoload), tested on the hardware
+ADDONS = [(n, 'release/v9_hub8/' + n) for n in ('HUB.WAV', 'CHOPAGE.WAV', 'SAMPLEFX.WAV', 'AUTOWARP.WAV', 'TRANSCHP.WAV', 'PADTOOLS.WAV')]
 CRC_OFF, OS_HDR = 0x10010, 0x10000
 
 def main():
@@ -33,7 +33,7 @@ def main():
         patches.append({'off': a, 'orig': o[a:b].hex(), 'data': p[a:b].hex()})
     size = struct.unpack('<I', o[OS_HDR + 0xC:OS_HDR + 0x10])[0]
     out = {
-        'name': 'Open500 loader v8',
+        'name': 'Open500 loader v9',
         'target': 'Akai MPC500 OS 1.31 (mpc500.bin)',
         'size': len(o),
         'base_crc32': zlib.crc32(o) & 0xffffffff,

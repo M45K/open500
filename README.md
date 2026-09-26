@@ -8,15 +8,16 @@ the Open500 loader in your browser. Nothing is uploaded, and this repository con
 ## Add-ons
 | Add-on | File | |
 |---|---|---|
-| HUB | `HUB.WAV` | add-on manager, load it first (up to 4 add-ons at the same time) |
+| HUB | `HUB.WAV` | add-on manager, load it first (up to 8 add-ons at the same time) |
 | Auto Chop | `CHOPAGE.WAV` | equal slices by BPM onto the pads; pad preview, hit the first pad, mono + one mute group |
 | Trans-Chop | `TRANSCHP.WAV` | slices on the transients (sensitivity), cut just before each hit; pad preview, hit the first pad |
 | Auto Warp | `AUTOWARP.WAV` | fit a loop to the sequence tempo with the MPC's own time stretch; bars guessed; pad preview |
-| Sample FX | `SAMPLEFX.WAV` | fades, gain, bit crush, downsample, drive, silence trim printed into a new sample; pad preview |
+| Sample FX | `SAMPLEFX.WAV` | chain of up to 8 effects (fades, gain, bit crush, downsample, drive, vinyl crackle, silence trim) printed into a new sample; pad preview |
+| Pad Tools | `PADTOOLS.WAV` | swap / copy / clear pads (sample, whole pad, or pad + MIDI note); SHIFT+STOP |
 
 ## How it works
 - The loader (1.3 KB) is written into an unused, all-zero area of the MPC500 OS 1.31 and hooked into the OS main
-  loop. It reserves the last 256 KB of sample memory for add-ons.
+  loop. It reserves the last 384 KB of sample memory for add-ons.
 - Add-ons are WAV files with a signed, relocatable payload. After a LOAD, the HUB finds them in the sample list,
   installs them and adds their entry to MODE → OTHER. Their pages are real objects of the OS page framework.
 - The bootloader is never touched: flashing the original OS removes everything.

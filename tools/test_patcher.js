@@ -1,5 +1,5 @@
 // Checks the browser patcher against the files tested on the hardware:
-//   original OS 1.31 + patch  ==  re_work/release/v4_topmem/mpc500_loader.bin  (byte for byte)
+//   original OS 1.31 + patch  ==  re_work/release/v9_hub8/mpc500_loader.bin  (byte for byte)
 // and that wrong inputs are refused.   Run: node tools/test_patcher.js
 'use strict';
 var fs = require('fs'), path = require('path'), assert = require('assert');
@@ -7,7 +7,7 @@ var P = require('../docs/patcher.js'), PATCH = require('../docs/patch.js');
 var RE = path.join(__dirname, '..', '..', 're_work');
 
 var orig = fs.readFileSync(path.join(RE, 'mpc500.bin'));
-var tested = fs.readFileSync(path.join(RE, 'release', 'v4_topmem', 'mpc500_loader.bin'));
+var tested = fs.readFileSync(path.join(RE, 'release', 'v9_hub8', 'mpc500_loader.bin'));
 
 var r = P.applyPatch(orig, PATCH);
 assert.ok(r.ok, r.error);
