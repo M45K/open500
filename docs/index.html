@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Open500 — native add-ons for the Akai MPC500</title>
-<meta name="description" content="Open500 adds new native pages to the Akai MPC500: Auto Chop, Trans-Chop, Auto Warp, Sample FX, Pad Tools. Loaded from a WAV file, no hardware mod.">
+<meta name="description" content="Open500 adds new native pages to the Akai MPC500: Master FX, Grid Seq, Auto Chop, Trans-Chop, Auto Warp, Sample FX, Pad Tools, Input Thru. Loaded from a WAV file, no hardware mod.">
 <style>
   :root {
     --bg: #141518; --panel: #1d1f24; --panel2: #25282e; --line: #33363d;
@@ -24,6 +24,7 @@
   .btn { display: inline-block; background: var(--red); color: #fff; text-decoration: none; font-weight: 700; padding: 12px 20px; border-radius: 8px; border: 0; cursor: pointer; font-size: 16px; }
   .btn:hover { background: var(--red2); }
   .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); }
+  .btn.donate { background: #0070ba; } .btn.donate:hover { background: #1a8ad4; }
   .btn[disabled] { opacity: .4; cursor: not-allowed; }
   section { padding: 48px 0; border-bottom: 1px solid var(--line); }
   h2 { font-size: 28px; margin: 0 0 18px; }
@@ -62,7 +63,8 @@
     <h1 class="logo">Open<span>500</span></h1>
     <p class="tag">New native pages for the Akai MPC500, loaded from a WAV file.<br>No hardware mod, no soldering, fully reversible.</p>
     <p><span class="pill">MPC500 OS 1.31</span><span class="pill">free</span><span class="pill">open source</span></p>
-    <p><a class="btn" href="#install">Install</a> &nbsp; <a class="btn ghost" href="#addons">See the add-ons</a></p>
+    <p><a class="btn" href="#install">Install</a> &nbsp; <a class="btn ghost" href="#addons">See the add-ons</a> &nbsp;
+      <a class="btn donate" href="https://paypal.me/SupportOpen500" target="_blank" rel="noopener">&hearts; Support Open500</a></p>
     <!-- TODO: replace with the 20-40 s video of the add-ons running on the MPC500 -->
     <div class="media">video: Open500 on the MPC500 (coming soon)</div>
   </div>
@@ -85,6 +87,26 @@
     <p class="muted">Every add-on works the same way: you hear the result on the pads <b>before</b> you commit,
       <kbd>DO IT</kbd> asks for confirmation, and your original sample is never modified.</p>
     <div class="grid">
+      <div class="card">
+        <div class="status ok">available</div>
+        <h3>Master FX</h3>
+        <p>12 live effects on the whole mix, SP-404 style: hold a pad, the effect plays while your beat keeps running.</p>
+        <div class="lcd">SCATTER  AMT  60
+RATE 50         </div>
+        <p class="muted">Stutter, filter, trance gate, lo-fi, vinyl, scatter, delay, reverb, reverse, tape stop, chorus, tremolo.
+          The <b>slider</b> drives the main parameter; timed effects follow the sequence tempo. Holding a pad shows the CPU load.</p>
+        <p><a class="btn" href="addons/MASTERFX.WAV" download>Download MASTERFX.WAV</a></p>
+      </div>
+      <div class="card">
+        <div class="status ok">available</div>
+        <h3>Grid Seq</h3>
+        <p>A 16-step grid sequencer on the MPC's display, editing your real sequence &mdash; even while it plays.</p>
+        <div class="lcd">&#9642;.&#9642;.&#9633;.&#9642;.:.&#9642;.&#9642;.&#9642;.
+A01 B 1 S 5 V100</div>
+        <p class="muted">Hit a pad to pick the sound, move along the steps with the arrow keys and press <kbd>QLINK</kbd> to add or
+          remove a hit. <kbd>&darr;</kbd> goes to bar / step / velocity, <kbd>&uarr;</kbd> back to the grid.</p>
+        <p><a class="btn" href="addons/GRID.WAV" download>Download GRID.WAV</a></p>
+      </div>
       <div class="card">
         <div class="status ok">available</div>
         <h3>Auto Chop</h3>
@@ -137,6 +159,15 @@ COPY  PAD       </div>
         <p><a class="btn" href="addons/PADTOOLS.WAV" download>Download PADTOOLS.WAV</a></p>
       </div>
       <div class="card">
+        <div class="status ok">available</div>
+        <h3>Input Thru</h3>
+        <p>Keeps the line input open to the outputs: play a synth or a turntable over your beats.</p>
+        <div class="lcd">INPUT THRU ON   
+LEVEL +0.0dB    </div>
+        <p class="muted">Analog pass-through with adjustable level. It stays on in every page and pauses by itself while you sample.</p>
+        <p><a class="btn" href="addons/INTHRU.WAV" download>Download INTHRU.WAV</a></p>
+      </div>
+      <div class="card">
         <div class="status ok">required</div>
         <h3>HUB</h3>
         <p>The add-on manager. Load it first: it installs every add-on you load after it (up to 8 at the same time) and adds them to the <kbd>OTHER</kbd> menu.</p>
@@ -175,13 +206,14 @@ COPY  PAD       </div>
       </li>
       <li>
         <h3>Load the add-ons</h3>
-        <p>Copy <code>HUB.WAV</code> and the add-ons you want (<code>CHOPAGE.WAV</code>, <code>TRANSCHP.WAV</code>, <code>AUTOWARP.WAV</code>, <code>SAMPLEFX.WAV</code>, <code>PADTOOLS.WAV</code>) to the card. On the MPC, <kbd>LOAD</kbd> <code>HUB.WAV</code> first
+        <p>Copy <code>HUB.WAV</code> and the add-ons you want (<code>MASTERFX.WAV</code>, <code>GRID.WAV</code>, <code>CHOPAGE.WAV</code>, <code>TRANSCHP.WAV</code>, <code>AUTOWARP.WAV</code>, <code>SAMPLEFX.WAV</code>, <code>PADTOOLS.WAV</code>, <code>INTHRU.WAV</code>) to the card. On the MPC, <kbd>LOAD</kbd> <code>HUB.WAV</code> first
           (the screen shows <code>LOADED hub</code>), then the add-ons (<code>LOADED &lt;name&gt;</code>).</p>
         <p>Open them from <kbd>MODE</kbd> → <kbd>OTHER</kbd>: the add-ons are listed after <i>Version</i>. Select one, press <kbd>DO IT</kbd>. <kbd>CANCEL</kbd> goes back.</p>
       </li>
     </ol>
     <div class="note">Add-ons live in memory like samples. To have them ready at every power on, put <code>HUB.WAV</code> and the add-ons
       in the MPC's <b>autoload</b> folder on the card: they load by themselves, in any order. Otherwise load them again after switching the MPC off.</div>
+    <div class="note">Already running an older Open500? Patch and flash again: this version reserves more memory, needed by Master FX.</div>
   </div>
 </section>
 
@@ -191,7 +223,7 @@ COPY  PAD       </div>
     <ul>
       <li>Open500 does <b>not</b> touch the bootloader. If anything goes wrong, the MPC can always be updated again.</li>
       <li>To remove it: flash the original <code>mpc500.bin</code> (OS 1.31) the same way (<kbd>SHIFT</kbd> at power on, then <kbd>REC</kbd>).</li>
-      <li>Open500 reserves the last 384 KB of sample memory for the add-ons.</li>
+      <li>Open500 reserves the last 896 KB of sample memory: 384 KB for the add-ons, 512 KB for the Master FX delay / reverb buffers.</li>
       <li>Messages on the second line: <code>NO FREE SLOT</code> (8 add-ons already loaded), <code>BAD</code> (damaged WAV),
         <code>LOW MEM: ADDONS!</code> (sample memory almost full). <kbd>SHIFT</kbd>+<kbd>ERASE</kbd> reloads the add-on manager.</li>
     </ul>
@@ -203,17 +235,19 @@ COPY  PAD       </div>
   <div class="wrap">
     <h2>FAQ</h2>
     <details><summary>Does it work on the MPC1000 / MPC2500?</summary><p>Not yet. Open500 is built on a detailed study of the MPC500 OS 1.31; other models run different software.</p></details>
-    <details><summary>Does it change how my MPC500 works?</summary><p>No. Without add-ons loaded, the OS behaves like the original 1.31 — the only difference is 384 KB less sample memory, reserved for add-ons. Your programs, samples and sequences are not affected.</p></details>
+    <details><summary>Does it change how my MPC500 works?</summary><p>No. Without add-ons loaded, the OS behaves like the original 1.31 — the only difference is 896 KB less sample memory, reserved for add-ons and effects. Your programs, samples and sequences are not affected.</p></details>
     <details><summary>Why do I have to provide the OS file myself?</summary><p>Because the operating system belongs to Akai. Open500 only publishes its own code, and your browser combines the two on your computer.</p></details>
     <details><summary>Can I write my own add-on?</summary><p>Yes, that is the idea. The add-on SDK (Python, with an emulator to test add-ons before trying them on the MPC) will be documented in the repository.</p></details>
     <details><summary>I have an idea for an add-on</summary><p>Great — open an issue in the repository and describe it.</p></details>
+    <details><summary>How can I support the project?</summary><p>Open500 is free. If it is useful to you, a donation helps keep it going:
+      <a href="https://paypal.me/SupportOpen500" target="_blank" rel="noopener">paypal.me/SupportOpen500</a>.</p></details>
   </div>
 </section>
 
 <footer>
   <div class="wrap">
+    <p><a href="https://github.com/M45K/open500">GitHub</a> &middot; <a href="https://paypal.me/SupportOpen500" target="_blank" rel="noopener">&hearts; Support Open500 (PayPal)</a></p>
     Open500 — an independent project for the Akai MPC500. Akai Professional and MPC are trademarks of inMusic Brands.
-    <!-- TODO: link to the GitHub repository and contact -->
   </div>
 </footer>
 
