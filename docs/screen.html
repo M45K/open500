@@ -21,6 +21,12 @@
   .bk { color: #6a6c73; font: 14px ui-monospace, Menlo, monospace; text-align: center; }
   .pd { height: min(40px, 6vw); border-radius: 6px; background: #3f8f4e; color: #0d0e10; font: 700 12px ui-monospace, Menlo, monospace;
         display: flex; align-items: center; justify-content: center; }
+  .grow { display: grid; grid-template-columns: 40px repeat(16, min(30px, 4.6vw)); gap: 3px; align-items: center; }
+  .gs { height: min(22px, 4vw); border-radius: 4px; background: #2a2c31; } .gs.q { background: #34373e; }
+  .gs.on { background: #ff4a3d; } .gs.cur { outline: 2px solid #e7e7ea; } .bk.selp { color: #ff4a3d; font-weight: 700; }
+  .srow { display: grid; grid-template-columns: repeat(12, min(52px, 7vw)); gap: 5px; }
+  .sp { background: #2a2c31; border-radius: 6px; text-align: center; padding: 6px 0; font: 13px ui-monospace, Menlo, monospace; }
+  .sp b { display: block; font-size: 16px; color: #e0c04a; } .sp span { color: #8a8c93; font-size: 11px; }
   .pd.m { background: #c8453a; } .pd.s { background: #e0c04a; } .pd.z { background: #3a3c42; color: #8a8c93; }
 </style>
 </head>
@@ -32,30 +38,24 @@
 <div id="views"></div>
 <div id="st">premi "Collega" (Chrome: consenti i messaggi SysEx)</div>
 <button id="go">Collega</button>
+<script src="o5link.js"></script>
 <script>
-// Riceve dall'addon MIDI SCREEN (MIDISCR.WAV):
-//   F0 7D 01 seq cursore <32 caratteri> F7      display (cursore = posizione+1, 0 = nessuno)
-//   F0 7D 02 sig chunk <32 picchi 0..127> F7    forma d'onda (8 chunk = 256 colonne)
-//   F0 7D 03 sig <len 5x7> <start 5x7> <end 5x7> F7   trim
-//   F0 7D 04 sig mseq parte n k <k posizioni 4x7> F7   tagli di un tool (es. Trans-Chop), 12 per pacchetto
-//   F0 7D 05 sig cnt on fetta+1 <start 5x7> <end 5x7> F7   ascolto: fetta evidenziata + cursore che scorre
-//   F0 7D 30 vista ver seq parte nparti <packed7> chk F7     VISTA di un add-on (docs/PROTOCOL.md §4.2), es. 4 = Pad Mute
+// Schermo remoto Open500: tutto il protocollo e' in o5link.js; qui solo il disegno.
+// Trasporto: Web MIDI (Chrome desktop/Android) oppure il ponte nativo della companion app (window.O5Native).
 var cv = document.getElementById('wv'), g = cv.getContext('2d'), lcd = document.getElementById('lcd'),
-    info = document.getElementById('info'), st = document.getElementById('st');
-var sig = -1, peaks = new Array(256).fill(0), have = new Array(8).fill(false), trim = null, n = 0, bad = 0;
-var chops = [], cin = null, play = null;   // play = { k, start, end, t0 }   // tagli mostrati; cin = { mseq, n, parti ricevute }
-function v35(d, i) { var v = 0; for (var k = 4; k >= 0; k--) v = v * 128 + d[i + k]; return v; }
-function v28(d, i) { var v = 0; for (var k = 3; k >= 0; k--) v = v * 128 + d[i + k]; return v; }
+    info = document.getElementById('info'), st = document.getElementById('st'), vbox = document.getElementById('views');
+var link = new O5Link.Link();
+var S = { peaks: new Array(256).fill(0), have: new Array(8).fill(false), trim: null, chops: [], play: null, sig: -1 };
 function ch(c) { return c === 0x7F ? '█' : c < 8 ? '□' : String.fromCharCode(c); }
-function newsig(s) { if (s !== sig) { sig = s; peaks.fill(0); have.fill(false); trim = null; chops = []; cin = null; play = null; } }
+function newsig(s) { if (s !== S.sig) { S.sig = s; S.trim = null; S.chops = []; S.play = null; } }
 function draw() {
-  var W = cv.width, H = cv.height, mid = H / 2, cw = W / 256;
+  var W = cv.width, H = cv.height, mid = H / 2, cw = W / 256, trim = S.trim, play = S.play, chops = S.chops;
   g.clearRect(0, 0, W, H);
   var x0 = 0, x1 = W;
   if (trim && trim.len > 0) { x0 = trim.start / trim.len * W; x1 = (trim.end + 1) / trim.len * W; }
   for (var c = 0; c < 256; c++) {
-    var x = c * cw, h = peaks[c] / 127 * (H / 2 - 6), inside = x + cw > x0 && x < x1;
-    g.fillStyle = !have[c >> 5] ? '#2a2c31' : inside ? '#ff4a3d' : '#5a3a38';
+    var x = c * cw, h = S.peaks[c] / 127 * (H / 2 - 6), inside = x + cw > x0 && x < x1;
+    g.fillStyle = !S.have[c >> 5] ? '#2a2c31' : inside ? '#ff4a3d' : '#5a3a38';
     g.fillRect(x, mid - h, Math.max(cw - 1, 1), Math.max(2 * h, 1));
   }
   if (trim && trim.len > 0) {
@@ -69,8 +69,7 @@ function draw() {
       g.fillStyle = '#ffffff'; g.fillRect(pos / trim.len * W - 1, 0, 2, H);
     }
     for (var q = 0; q < chops.length; q++) {                       // tagli: linea + numero della fetta (= pad)
-      var xc = chops[q] / trim.len * W;
-      var on = play && play.k === q;
+      var xc = chops[q] / trim.len * W, on = play && play.slice === q;
       g.fillStyle = on ? '#ffffff' : '#7fd4ff'; g.fillRect(xc - 1, 22, 2, H - 22);
       g.font = (on ? 'bold 15px' : 'bold 12px') + ' Menlo, monospace'; g.fillText(String(q + 1), xc + 3, H - 6);
     }
@@ -81,60 +80,33 @@ function draw() {
       ')   regione ' + sec(trim.end - trim.start + 1) + '   lunghezza ' + trim.len;
   } else info.textContent = 'nessun sample';
 }
-function onmsg(e) {
-  var d = e.data;
-  if (d[0] !== 0xF0 || d[1] !== 0x7D) return;
-  var t = d[2];
-  if (t === 1 && d.length === 38) {
-    var s = '', cur = d[4] - 1;
-    for (var i = 0; i < 32; i++) {
-      var c = ch(d[5 + i]).replace('&', '&amp;').replace('<', '&lt;');
-      s += i === cur ? '<span class="cur">' + c + '</span>' : c; if (i === 15) s += '\n';
-    }
-    lcd.innerHTML = s;
-  } else if (t === 2 && d.length === 38) {
-    newsig(d[3]); var k = d[4];
-    for (var j = 0; j < 32; j++) peaks[k * 32 + j] = d[5 + j];
-    have[k] = true; draw();
-  } else if (t === 3 && d.length === 20) {
-    newsig(d[3]); trim = { len: v35(d, 4), start: v35(d, 9), end: v35(d, 14) }; draw();
-  } else if (t === 4 && d.length >= 9 && d.length === 9 + 4 * d[7]) {
-    newsig(d[3]); var ms = d[4], part = d[5], nn = d[6], k = d[7];
-    if (!cin || cin.mseq !== ms) cin = { mseq: ms, n: nn, pos: new Array(nn), got: 0 };
-    for (var z = 0; z < k; z++) cin.pos[part * 12 + z] = v28(d, 8 + 4 * z);
-    cin.got++;
-    if (cin.got >= Math.max(1, Math.ceil(nn / 12))) { chops = cin.pos.slice(); cin = null; draw(); }
-  } else if (t === 5 && d.length === 18) {
-    newsig(d[3]);
-    play = d[5] ? { k: d[6] - 1, start: v35(d, 7), end: v35(d, 12), t0: performance.now() } : null;
-    if (play) anim(); else draw();
-  } else if (t === 0x30 && d.length >= 10) {
-    if (!onview(d)) { bad++; return; }
-  } else { bad++; return; }
-  n++;
-  st.textContent = 'pacchetti ' + n + '  rovinati ' + bad + '  sample #' + sig + '  ' + new Date().toLocaleTimeString();
-}
-// ---- viste (MIDI Screen v8) ----
-var vparts = {}, views = {}, vbox = document.getElementById('views');
-function unpack7(b) {
-  var out = [];
-  for (var i = 0; i < b.length; i += 8) { var hi = b[i]; for (var j = 1; j < 8 && i + j < b.length; j++) out.push(b[i + j] | (hi >> (j - 1) & 1 ? 0x80 : 0)); }
-  return out;
-}
-function onview(d) {
-  var x = 0; for (var i = 2; i < d.length - 2; i++) x ^= d[i];
-  if ((x & 0x7F) !== d[d.length - 2]) return false;                       // chk sbagliato: scarta
-  var vw = d[3], ver = d[4], sq = d[5], part = d[6], np = d[7], key = vw + ':' + sq;
-  var e = vparts[key] || (vparts[key] = { n: np, parts: {} });
-  e.parts[part] = unpack7(Array.prototype.slice.call(d, 8, d.length - 2));
-  if (Object.keys(e.parts).length < e.n) return true;
-  var data = []; for (var k = 0; k < e.n; k++) data = data.concat(e.parts[k]);
-  for (var kk in vparts) if (kk.split(':')[0] == vw) delete vparts[kk];
-  views[vw] = { ver: ver, data: data, t: performance.now() }; drawviews(); return true;
-}
+function anim() { draw(); if (S.play) requestAnimationFrame(anim); }
+link.on('display', function (d) {
+  var s = '';
+  for (var i = 0; i < 32; i++) {
+    var c = ch(d.text[i]).replace('&', '&amp;').replace('<', '&lt;');
+    s += i === d.cursor ? '<span class="cur">' + c + '</span>' : c; if (i === 15) s += '\n';
+  }
+  lcd.innerHTML = s;
+});
+link.on('wave', function (w) { newsig(w.sig); S.peaks = w.peaks; S.have = w.have; draw(); });
+link.on('trim', function (t) { newsig(t.sig); S.trim = t; draw(); });
+link.on('chop', function (c) { newsig(c.sig); S.chops = c.positions; draw(); });
+link.on('play', function (p) {
+  newsig(p.sig); S.play = p.on ? { slice: p.slice, start: p.start, end: p.end, t0: performance.now() } : null;
+  if (S.play) anim(); else draw();
+});
+link.on('stats', function (x) {
+  st.textContent = 'pacchetti ' + x.ok + '  rovinati ' + x.bad + '  sample #' + S.sig + '  ' + new Date().toLocaleTimeString();
+});
+// ---- viste degli add-on (docs/PROTOCOL.md §5) ----
+var NOTE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+var SCALES = ['MAJOR', 'MINOR', 'DORIAN', 'PHRYG', 'LYDIAN', 'MIXOLYD', 'HARMMIN', 'PENTMAJ', 'PENTMIN', 'BLUES', 'CHROMA'];
+function s8(x) { return x > 127 ? x - 256 : x; }
+link.on('view', drawviews);
 function drawviews() {
-  var html = '';
-  var mu = views[4];
+  var V = link.views, html = '';
+  var mu = V[4];
   if (mu && mu.ver === 1 && mu.data.length >= 49) {                      // PAD MUTE: banco + 48 stati (bit0 mute, bit1 solo, bit2 zittito)
     html += '<div class="vtitle">PAD MUTE</div>';
     for (var b = 0; b < 4; b++) {
@@ -146,24 +118,46 @@ function drawviews() {
       html += '</div>';
     }
   }
+  var gr = V[2];
+  if (gr && gr.ver === 1 && gr.data.length >= 32) {                      // GRID SEQ: 12 pad x 16 step della battuta
+    var d = gr.data, bars = d[0] | d[1] << 8, bank = d[5];
+    html += '<div class="vtitle">GRID SEQ — bar ' + d[2] + '/' + bars + '  step ' + d[3] + '  track ' + (d[7] + 1) + '</div>';
+    for (var r = 11; r >= 0; r--) {
+      var mask = d[8 + 2 * r] | d[9 + 2 * r] << 8, sel = bank * 12 + r === d[4];
+      html += '<div class="grow"><div class="bk' + (sel ? ' selp' : '') + '">' + 'ABCD'[bank] + ('0' + (r + 1)).slice(-2) + '</div>';
+      for (var k = 0; k < 16; k++)
+        html += '<div class="gs' + (mask >> k & 1 ? ' on' : '') + (k % 4 === 0 ? ' q' : '') + (sel && k === d[3] - 1 && !d[6] ? ' cur' : '') + '"></div>';
+      html += '</div>';
+    }
+  }
+  var sc = V[3];
+  if (sc && sc.ver === 1 && sc.data.length >= 17) {                      // SCALE PADS: scala, tonalita', 12 note
+    var dd = sc.data, ks = dd[1] <= 6 ? dd[1] : dd[1] - 12;
+    html += '<div class="vtitle">SCALE PADS — ' + NOTE[dd[1]] + ' ' + (SCALES[dd[0]] || '?') + ' → bank ' + 'ABCD'[dd[2]] +
+            (dd[3] === 2 ? '  (source ' + 'ABCD'[(dd[4] / 12) | 0] + ('0' + (dd[4] % 12 + 1)).slice(-2) + ', DO IT?)' : '') + '</div><div class="srow">';
+    for (var i = 0; i < 12; i++) {
+      var semi = s8(dd[5 + i]), oct = Math.floor((semi - ks) / 12);          // ottava contata dalla tonica (pad 1)
+      html += '<div class="sp"><b>' + NOTE[((semi % 12) + 12) % 12] + '</b><span>' + (i + 1) + (oct ? (oct > 0 ? ' +' : ' ') + oct : '') + '</span></div>';
+    }
+    html += '</div>';
+  }
+  var sq = V[9];
+  if (sq && sq.ver === 1 && sq.data.length >= 4)
+    html += '<div class="vtitle">SEQ TOOLS — ' + (sq.data[0] | sq.data[1] << 8) + ' bars, ' + (sq.data[2] | sq.data[3] << 8) + ' events</div>';
   vbox.innerHTML = html;
 }
-function anim() { draw(); if (play) requestAnimationFrame(anim); }
 draw();
-document.getElementById('go').onclick = function () {
-  if (!navigator.requestMIDIAccess) {
-    st.textContent = 'questo browser non ha Web MIDI (su iPhone/iPad nessun browser lo ha): usa Chrome su Android/Mac/PC';
+function connect() {
+  if (window.O5Native) {                                         // dentro la companion app: MIDI nativo (CoreMIDI)
+    window.O5Native.start(function (bytes) { link.feedStream(bytes); }, function (info) { st.textContent = info; });
+    link.setSender(function (m) { window.O5Native.send(m); });
     return;
   }
-  navigator.requestMIDIAccess({ sysex: true }).then(function (a) {
-    function hook() {                                              // aggancia tutti gli ingressi, anche collegati dopo
-      var names = [];
-      a.inputs.forEach(function (i) { i.onmidimessage = onmsg; names.push(i.name); });
-      st.textContent = names.length ? 'in ascolto su: ' + names.join(', ') : 'nessun ingresso MIDI trovato';
-    }
-    a.onstatechange = hook; hook();
-  }, function (err) { st.textContent = 'MIDI non disponibile: ' + err; });
-};
+  link.on('ports', function (p) { st.textContent = p.inputs.length ? 'in ascolto su: ' + p.inputs.join(', ') : 'nessun ingresso MIDI trovato'; });
+  link.connectWebMidi().catch(function (err) { st.textContent = String(err.message || err); });
+}
+document.getElementById('go').onclick = connect;
+if (window.O5Native) connect();
 </script>
 </body>
 </html>
