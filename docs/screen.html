@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>MPC500 MIDI Screen</title>
+<style>
+  body { background: #141518; color: #e7e7ea; font: 16px -apple-system, sans-serif; display: flex; flex-direction: column; align-items: center; padding-top: 36px; margin: 0 8px; }
+  .lcd { background: #b9d27a; color: #1f2a12; font: 700 min(34px, 5.4vw)/1.2 ui-monospace, Menlo, monospace; padding: 14px 22px; border-radius: 10px;
+         border: 10px solid #0d0e10; white-space: pre; letter-spacing: 2px; margin-top: 22px; }
+  canvas { width: min(1024px, 96vw); height: auto; background: #1d1f24; border: 1px solid #33363d; border-radius: 10px; }
+  #info { margin-top: 10px; font: 15px ui-monospace, Menlo, monospace; color: #e7e7ea; }
+  .lcd .cur { background: #1f2a12; color: #b9d27a; border-radius: 3px; }
+  #st { margin-top: 14px; color: #9a9ca3; font: 13px ui-monospace, Menlo, monospace; }
+  button { margin-top: 16px; font-size: 16px; padding: 8px 16px; }
+</style>
+</head>
+<body>
+<canvas id="wv" width="1024" height="260"></canvas>
+<div id="info">nessun sample</div>
+<div class="lcd" id="lcd">
+                </div>
+<div id="st">premi "Collega" (Chrome: consenti i messaggi SysEx)</div>
+<button id="go">Collega</button>
+<script>
+// Riceve dall'addon MIDI SCREEN (MIDISCR.WAV):
+//   F0 7D 01 seq cursore <32 caratteri> F7      display (cursore = posizione+1, 0 = nessuno)
+//   F0 7D 02 sig chunk <32 picchi 0..127> F7    forma d'onda (8 chunk = 256 colonne)
+//   F0 7D 03 sig <len 5x7> <start 5x7> <end 5x7> F7   trim
+//   F0 7D 04 sig mseq parte n k <k posizioni 4x7> F7   tagli di un tool (es. Trans-Chop), 12 per pacchetto
+//   F0 7D 05 sig cnt on fetta+1 <start 5x7> <end 5x7> F7   ascolto: fetta evidenziata + cursore che scorre
+var cv = document.getElementById('wv'), g = cv.getContext('2d'), lcd = document.getElementById('lcd'),
+    info = document.getElementById('info'), st = document.getElementById('st');
+var sig = -1, peaks = new Array(256).fill(0), have = new Array(8).fill(false), trim = null, n = 0, bad = 0;
+var chops = [], cin = null, play = null;   // play = { k, start, end, t0 }   // tagli mostrati; cin = { mseq, n, parti ricevute }
+function v35(d, i) { var v = 0; for (var k = 4; k >= 0; k--) v = v * 128 + d[i + k]; return v; }
+function v28(d, i) { var v = 0; for (var k = 3; k >= 0; k--) v = v * 128 + d[i + k]; return v; }
+function ch(c) { return c === 0x7F ? '█' : c < 8 ? '□' : String.fromCharCode(c); }
+function newsig(s) { if (s !== sig) { sig = s; peaks.fill(0); have.fill(false); trim = null; chops = []; cin = null; play = null; } }
+function draw() {
+  var W = cv.width, H = cv.height, mid = H / 2, cw = W / 256;
+  g.clearRect(0, 0, W, H);
+  var x0 = 0, x1 = W;
+  if (trim && trim.len > 0) { x0 = trim.start / trim.len * W; x1 = (trim.end + 1) / trim.len * W; }
+  for (var c = 0; c < 256; c++) {
+    var x = c * cw, h = peaks[c] / 127 * (H / 2 - 6), inside = x + cw > x0 && x < x1;
+    g.fillStyle = !have[c >> 5] ? '#2a2c31' : inside ? '#ff4a3d' : '#5a3a38';
+    g.fillRect(x, mid - h, Math.max(cw - 1, 1), Math.max(2 * h, 1));
+  }
+  if (trim && trim.len > 0) {
+    g.fillStyle = 'rgba(0,0,0,0.45)'; g.fillRect(0, 0, x0, H); g.fillRect(x1, 0, W - x1, H);
+    g.fillStyle = '#6cc070'; g.fillRect(x0 - 1, 0, 3, H);
+    g.fillStyle = '#e0a84a'; g.fillRect(x1 - 2, 0, 3, H);
+    if (play) {                                                    // fetta in ascolto + cursore (44100 campioni/s)
+      var p0 = play.start / trim.len * W, p1 = (play.end + 1) / trim.len * W;
+      g.fillStyle = 'rgba(127,212,255,0.22)'; g.fillRect(p0, 0, p1 - p0, H);
+      var pos = Math.min(play.end, play.start + (performance.now() - play.t0) / 1000 * 44100);
+      g.fillStyle = '#ffffff'; g.fillRect(pos / trim.len * W - 1, 0, 2, H);
+    }
+    for (var q = 0; q < chops.length; q++) {                       // tagli: linea + numero della fetta (= pad)
+      var xc = chops[q] / trim.len * W;
+      var on = play && play.k === q;
+      g.fillStyle = on ? '#ffffff' : '#7fd4ff'; g.fillRect(xc - 1, 22, 2, H - 22);
+      g.font = (on ? 'bold 15px' : 'bold 12px') + ' Menlo, monospace'; g.fillText(String(q + 1), xc + 3, H - 6);
+    }
+    g.font = '13px Menlo, monospace'; g.fillStyle = '#6cc070'; g.fillText('START', x0 + 5, 16);
+    g.fillStyle = '#e0a84a'; g.fillText('END', Math.max(x1 - 32, x0 + 50), 16);
+    var sec = function (f) { return (f / 44100).toFixed(3) + ' s'; };
+    info.textContent = (chops.length ? 'Trans-Chop: ' + chops.length + ' fette   ' : '') + 'start ' + trim.start + ' (' + sec(trim.start) + ')   end ' + trim.end + ' (' + sec(trim.end) +
+      ')   regione ' + sec(trim.end - trim.start + 1) + '   lunghezza ' + trim.len;
+  } else info.textContent = 'nessun sample';
+}
+function onmsg(e) {
+  var d = e.data;
+  if (d[0] !== 0xF0 || d[1] !== 0x7D) return;
+  var t = d[2];
+  if (t === 1 && d.length === 38) {
+    var s = '', cur = d[4] - 1;
+    for (var i = 0; i < 32; i++) {
+      var c = ch(d[5 + i]).replace('&', '&amp;').replace('<', '&lt;');
+      s += i === cur ? '<span class="cur">' + c + '</span>' : c; if (i === 15) s += '\n';
+    }
+    lcd.innerHTML = s;
+  } else if (t === 2 && d.length === 38) {
+    newsig(d[3]); var k = d[4];
+    for (var j = 0; j < 32; j++) peaks[k * 32 + j] = d[5 + j];
+    have[k] = true; draw();
+  } else if (t === 3 && d.length === 20) {
+    newsig(d[3]); trim = { len: v35(d, 4), start: v35(d, 9), end: v35(d, 14) }; draw();
+  } else if (t === 4 && d.length >= 9 && d.length === 9 + 4 * d[7]) {
+    newsig(d[3]); var ms = d[4], part = d[5], nn = d[6], k = d[7];
+    if (!cin || cin.mseq !== ms) cin = { mseq: ms, n: nn, pos: new Array(nn), got: 0 };
+    for (var z = 0; z < k; z++) cin.pos[part * 12 + z] = v28(d, 8 + 4 * z);
+    cin.got++;
+    if (cin.got >= Math.max(1, Math.ceil(nn / 12))) { chops = cin.pos.slice(); cin = null; draw(); }
+  } else if (t === 5 && d.length === 18) {
+    newsig(d[3]);
+    play = d[5] ? { k: d[6] - 1, start: v35(d, 7), end: v35(d, 12), t0: performance.now() } : null;
+    if (play) anim(); else draw();
+  } else { bad++; return; }
+  n++;
+  st.textContent = 'pacchetti ' + n + '  rovinati ' + bad + '  sample #' + sig + '  ' + new Date().toLocaleTimeString();
+}
+function anim() { draw(); if (play) requestAnimationFrame(anim); }
+draw();
+document.getElementById('go').onclick = function () {
+  if (!navigator.requestMIDIAccess) {
+    st.textContent = 'questo browser non ha Web MIDI (su iPhone/iPad nessun browser lo ha): usa Chrome su Android/Mac/PC';
+    return;
+  }
+  navigator.requestMIDIAccess({ sysex: true }).then(function (a) {
+    function hook() {                                              // aggancia tutti gli ingressi, anche collegati dopo
+      var names = [];
+      a.inputs.forEach(function (i) { i.onmidimessage = onmsg; names.push(i.name); });
+      st.textContent = names.length ? 'in ascolto su: ' + names.join(', ') : 'nessun ingresso MIDI trovato';
+    }
+    a.onstatechange = hook; hook();
+  }, function (err) { st.textContent = 'MIDI non disponibile: ' + err; });
+};
+</script>
+</body>
+</html>
