@@ -14,6 +14,14 @@
   .lcd .cur { background: #1f2a12; color: #b9d27a; border-radius: 3px; }
   #st { margin-top: 14px; color: #9a9ca3; font: 13px ui-monospace, Menlo, monospace; }
   button { margin-top: 16px; font-size: 16px; padding: 8px 16px; }
+  #views { margin-top: 18px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .vtitle { color: #9a9ca3; font: 13px ui-monospace, Menlo, monospace; }
+  .mrow { display: grid; grid-template-columns: 28px repeat(12, min(52px, 6.5vw)); gap: 5px; align-items: center; }
+  .mrow.cur .bk { color: #e7e7ea; font-weight: 700; }
+  .bk { color: #6a6c73; font: 14px ui-monospace, Menlo, monospace; text-align: center; }
+  .pd { height: min(40px, 6vw); border-radius: 6px; background: #3f8f4e; color: #0d0e10; font: 700 12px ui-monospace, Menlo, monospace;
+        display: flex; align-items: center; justify-content: center; }
+  .pd.m { background: #c8453a; } .pd.s { background: #e0c04a; } .pd.z { background: #3a3c42; color: #8a8c93; }
 </style>
 </head>
 <body>
@@ -21,6 +29,7 @@
 <div id="info">nessun sample</div>
 <div class="lcd" id="lcd">
                 </div>
+<div id="views"></div>
 <div id="st">premi "Collega" (Chrome: consenti i messaggi SysEx)</div>
 <button id="go">Collega</button>
 <script>
@@ -30,6 +39,7 @@
 //   F0 7D 03 sig <len 5x7> <start 5x7> <end 5x7> F7   trim
 //   F0 7D 04 sig mseq parte n k <k posizioni 4x7> F7   tagli di un tool (es. Trans-Chop), 12 per pacchetto
 //   F0 7D 05 sig cnt on fetta+1 <start 5x7> <end 5x7> F7   ascolto: fetta evidenziata + cursore che scorre
+//   F0 7D 30 vista ver seq parte nparti <packed7> chk F7     VISTA di un add-on (docs/PROTOCOL.md §4.2), es. 4 = Pad Mute
 var cv = document.getElementById('wv'), g = cv.getContext('2d'), lcd = document.getElementById('lcd'),
     info = document.getElementById('info'), st = document.getElementById('st');
 var sig = -1, peaks = new Array(256).fill(0), have = new Array(8).fill(false), trim = null, n = 0, bad = 0;
@@ -98,9 +108,45 @@ function onmsg(e) {
     newsig(d[3]);
     play = d[5] ? { k: d[6] - 1, start: v35(d, 7), end: v35(d, 12), t0: performance.now() } : null;
     if (play) anim(); else draw();
+  } else if (t === 0x30 && d.length >= 10) {
+    if (!onview(d)) { bad++; return; }
   } else { bad++; return; }
   n++;
   st.textContent = 'pacchetti ' + n + '  rovinati ' + bad + '  sample #' + sig + '  ' + new Date().toLocaleTimeString();
+}
+// ---- viste (MIDI Screen v8) ----
+var vparts = {}, views = {}, vbox = document.getElementById('views');
+function unpack7(b) {
+  var out = [];
+  for (var i = 0; i < b.length; i += 8) { var hi = b[i]; for (var j = 1; j < 8 && i + j < b.length; j++) out.push(b[i + j] | (hi >> (j - 1) & 1 ? 0x80 : 0)); }
+  return out;
+}
+function onview(d) {
+  var x = 0; for (var i = 2; i < d.length - 2; i++) x ^= d[i];
+  if ((x & 0x7F) !== d[d.length - 2]) return false;                       // chk sbagliato: scarta
+  var vw = d[3], ver = d[4], sq = d[5], part = d[6], np = d[7], key = vw + ':' + sq;
+  var e = vparts[key] || (vparts[key] = { n: np, parts: {} });
+  e.parts[part] = unpack7(Array.prototype.slice.call(d, 8, d.length - 2));
+  if (Object.keys(e.parts).length < e.n) return true;
+  var data = []; for (var k = 0; k < e.n; k++) data = data.concat(e.parts[k]);
+  for (var kk in vparts) if (kk.split(':')[0] == vw) delete vparts[kk];
+  views[vw] = { ver: ver, data: data, t: performance.now() }; drawviews(); return true;
+}
+function drawviews() {
+  var html = '';
+  var mu = views[4];
+  if (mu && mu.ver === 1 && mu.data.length >= 49) {                      // PAD MUTE: banco + 48 stati (bit0 mute, bit1 solo, bit2 zittito)
+    html += '<div class="vtitle">PAD MUTE</div>';
+    for (var b = 0; b < 4; b++) {
+      html += '<div class="mrow' + (b === mu.data[0] ? ' cur' : '') + '"><div class="bk">' + 'ABCD'[b] + '</div>';
+      for (var p = 0; p < 12; p++) {
+        var f = mu.data[1 + b * 12 + p], c = f & 2 ? 's' : f & 1 ? 'm' : f & 4 ? 'z' : '';
+        html += '<div class="pd ' + c + '">' + (f & 2 ? 'S' : f & 1 ? 'M' : '') + (p + 1) + '</div>';
+      }
+      html += '</div>';
+    }
+  }
+  vbox.innerHTML = html;
 }
 function anim() { draw(); if (play) requestAnimationFrame(anim); }
 draw();
