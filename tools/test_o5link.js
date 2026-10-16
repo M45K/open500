@@ -63,3 +63,14 @@ console.log('ok: %d packets decoded, same result per message and as a byte strea
   await assert.rejects(L2._request(0x10, [], 0x11, { tries: 2, timeout: 20 }), /did not answer/);
   console.log('ok: ping, peek, poke, event, caps (queued, ids), timeout with retries');
 })().catch(e => { console.error(e); process.exit(1); });
+
+// 4) the same protocol through the MPC's USB port (MIDI Screen v9 + USB MIDI v4, emulator, fixtures/usbscreen_v9.json)
+(() => {
+  const PU = require(path.join(__dirname, 'fixtures', 'usbscreen_v9.json'));
+  const L = new O5.Link(), seen = { display: 0, wave: 0, trim: 0, view: [] };
+  L.on('display', () => seen.display++); L.on('wave', () => seen.wave++); L.on('trim', () => seen.trim++); L.on('view', v => seen.view.push(v));
+  PU.forEach(p => L.feedStream(p));
+  assert.strictEqual(L.stats.bad, 0);
+  assert.ok(seen.display && seen.trim && seen.view.some(v => v.view === 4 && v.data.length === 49), JSON.stringify(seen).slice(0, 200));
+  console.log('ok: USB stream (%d messages, 1.2 s): display, trim, Pad Mute view decoded, no errors', PU.length);
+})();
