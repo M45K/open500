@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -114,14 +114,14 @@
   <div class="pill"><small>PROGRAM</small><b id="pPgm">--</b></div>
   <div class="pill"><small>BANK</small><b id="pBank">-</b></div>
   <div class="pill wide"><small>SAMPLE</small><b id="pSmp">--</b></div>
-  <button id="go">Collega</button>
+  <button id="go">Connect</button>
 </div>
 <div id="dash">
   <section>
     <div class="lcd" id="lcd">
                 </div>
     <div class="card">
-      <div class="ttl"><span>PADS</span><span id="padsSrc">program: in attesa</span></div>
+      <div class="ttl"><span>PADS</span><span id="padsSrc">program: waiting</span></div>
       <div id="banks"></div>
       <div id="pads"></div>
     </div>
@@ -133,7 +133,7 @@
   <section id="panel">
     <div class="card tab" data-tab="sample">
       <div class="ttl"><span>SAMPLE EDIT</span><span id="smpName"></span></div>
-      <canvas id="wv" width="1600" height="560"></canvas><div id="info">nessun sample</div>
+      <canvas id="wv" width="1600" height="560"></canvas><div id="info">no sample</div>
     </div>
     <div class="card tab" data-tab="grid"><div id="vGrid"></div></div>
     <div class="card tab" data-tab="scale"><div id="vScale"></div></div>
@@ -146,14 +146,14 @@
   </section>
 </div>
 <div class="card" id="mixer">
-  <div class="ttl"><span>MIXER</span><span id="mixInfo">livelli dei pad: in attesa</span></div>
+  <div class="ttl"><span>MIXER</span><span id="mixInfo">pad levels: waiting</span></div>
   <div id="faders"></div>
 </div>
 <div id="fkeys">
   <div data-k="auto">AUTO</div><div data-k="sample">SAMPLE</div><div data-k="grid">GRID</div>
   <div data-k="scale">SCALE</div><div data-k="mute">MUTE</div><div data-k="memory">MEMORY</div>
 </div>
-<div id="st">premi "Collega" (Chrome: consenti i messaggi SysEx)</div>
+<div id="st">press "Connect" (Chrome: allow SysEx messages)</div>
 <script src="o5link.js"></script>
 <script>
 // Schermo remoto Open500: il protocollo e' in o5link.js; qui il disegno e le letture periodiche (PEEK, sola lettura).
@@ -207,7 +207,7 @@ function draw() {
     var it = function (k, v) { return '<span><b>' + k + '</b>' + v + '</span>'; };
     info.innerHTML = (chops.length ? it('SLICES', chops.length) : '') + it('START', trim.start + ' · ' + secs(trim.start)) +
       it('END', trim.end + ' · ' + secs(trim.end)) + it('REGION', secs(trim.end - trim.start + 1)) + it('LENGTH', secs(trim.len));
-  } else info.textContent = 'nessun sample';
+  } else info.textContent = 'no sample';
 }
 function anim() { draw(); if (S.play) requestAnimationFrame(anim); }
 
@@ -261,7 +261,7 @@ function drawPads() {
     var dots = '';
     if (grid) { var mask = grid[8 + 2 * i] | grid[9 + 2 * i] << 8; dots = '<div class="dots">'; for (var s = 0; s < 16; s++) dots += '<i' + (mask >> s & 1 ? ' class="on"' : '') + '></i>'; dots += '</div>'; }
     html += '<div class="pad' + cls + '"><div class="n"><span>' + 'ABCD'[b] + ('0' + (i + 1)).slice(-2) + '</span>' + badge + '<span class="nt">' + note + '</span></div>' +
-            '<div class="nm' + (nm ? '' : ' empty') + '">' + (nm === undefined ? '…' : nm ? esc(nm) : 'vuoto') + '</div>' + dots + '</div>';
+            '<div class="nm' + (nm ? '' : ' empty') + '">' + (nm === undefined ? '…' : nm ? esc(nm) : 'empty') + '</div>' + dots + '</div>';
   });
   $('pads').innerHTML = html;
 }
@@ -288,7 +288,7 @@ function drawMixer() {                                             // i fader si
     el.children[2].textContent = f & 1 ? 'MUTE' : f & 4 ? 'OFF' : v === undefined ? '--' : v;
     el.children[3].textContent = M.pads[p] || '';
   }
-  $('mixInfo').textContent = MX.err || (M.program >= 0 ? 'program ' + (M.program + 1) + ' · banco ' + 'ABCD'[b] + ' · trascina per cambiare il livello' : 'livelli dei pad: in attesa');
+  $('mixInfo').textContent = MX.err || (M.program >= 0 ? 'program ' + (M.program + 1) + ' · bank ' + 'ABCD'[b] + ' · drag to change the level' : 'pad levels: waiting');
 }
 function setFader(el, ev) {
   var i = +el.getAttribute('data-i'), r = el.querySelector('.trk').getBoundingClientRect();
@@ -301,7 +301,7 @@ function sendLevels() {                                            // un POKE al
   var i = +keys[0], v = MX.want[i], b = viewBank(), prog = M.program; MX.sending = true;
   link.setLevel(prog, b * 12 + i, v).then(function () {
     MX.lv[i] = v; MX.err = '';
-  }, function (e) { MX.err = 'livello non scritto: ' + e.message; MX.key = ''; }).then(function () {
+  }, function (e) { MX.err = 'level not written: ' + e.message; MX.key = ''; }).then(function () {
     if (MX.want[i] === v) delete MX.want[i];
     MX.sending = false; drawMixer(); sendLevels();
   });
@@ -319,9 +319,9 @@ $('faders').addEventListener('pointermove', function (ev) {
 function drawSamples() {
   var s = M.samples; if (!s) return;
   var mb = function (x) { return (x / 1048576).toFixed(1) + ' MB'; };
-  $('memTxt').textContent = s.list.length + ' sample, liberi ' + mb(s.total - s.used) + ' su ' + mb(s.total);
+  $('memTxt').textContent = s.list.length + ' samples, ' + mb(s.total - s.used) + ' free of ' + mb(s.total);
   $('memBar').style.width = $('memBar2').style.width = Math.min(100, s.used / s.total * 100).toFixed(1) + '%';
-  $('memTxt2').textContent = 'liberi ' + mb(s.total - s.used);
+  $('memTxt2').textContent = mb(s.total - s.used) + ' free';
   $('slist').innerHTML = s.list.map(function (x) {
     return '<div' + (x.addr === s.current ? ' class="cur"' : '') + '><b>' + esc(x.name || '?') + '</b><span>' + secs(x.frames) + '</span><span>' + Math.round(x.size / 1024) + ' KB</span></div>';
   }).join('');
@@ -353,10 +353,10 @@ function poll() {
     if (now - R.samplesAt < 15000) return;
     return link.readSamples().then(function (s) { M.samples = s; R.samplesAt = now; drawSamples(); bar(); fkeys(); });
   }).then(function () {
-    $('padsSrc').textContent = 'program ' + (M.program + 1) + (M.showBank >= 0 && M.showBank !== M.bank ? ' (vista banco ' + 'ABCD'[M.showBank] + ')' : '');
+    $('padsSrc').textContent = 'program ' + (M.program + 1) + (M.showBank >= 0 && M.showBank !== M.bank ? ' (viewing bank ' + 'ABCD'[M.showBank] + ')' : '');
   }).catch(function (e) {
     R.until = Date.now() + 10000;
-    $('padsSrc').textContent = 'nessuna risposta: serve il cavo USB o il MIDI IN';
+    $('padsSrc').textContent = 'no answer: needs the USB cable or MIDI IN';
   }).then(function () { R.busy = false; });
 }
 setInterval(poll, 1500);
@@ -373,7 +373,7 @@ link.on('play', function (p) {
   if (S.play) anim(); else draw();
 });
 link.on('stats', function (x) {
-  st.textContent = 'pacchetti ' + x.ok + '  rovinati ' + x.bad + '  sample #' + S.sig + '  ' + new Date().toLocaleTimeString();
+  st.textContent = 'packets ' + x.ok + '  bad ' + x.bad + '  sample #' + S.sig + '  ' + new Date().toLocaleTimeString();
 });
 var VTAB = { 2: 'grid', 3: 'scale', 4: 'mute' }, lastView = {};
 link.on('view', function (v) {
@@ -412,7 +412,7 @@ function drawviews() {
       html += '</div>';
     }
   }
-  $('vGrid').innerHTML = html || none('GRID SEQ', 'apri Grid Seq sull\'MPC (MODE → OTHER)'); html = '';
+  $('vGrid').innerHTML = html || none('GRID SEQ', 'open Grid Seq on the MPC (MODE → OTHER)'); html = '';
   var sc = V[3];
   if (sc && sc.ver === 1 && sc.data.length >= 17) {                      // SCALE PADS: scala, tonalita', 12 note
     var dd = sc.data, ks = dd[1] <= 6 ? dd[1] : dd[1] - 12;
@@ -424,10 +424,10 @@ function drawviews() {
     }
     html += '</div>';
   }
-  $('vScale').innerHTML = html || none('SCALE PADS', 'apri Scale Pads sull\'MPC'); html = '';
+  $('vScale').innerHTML = html || none('SCALE PADS', 'open Scale Pads on the MPC (MODE → OTHER)'); html = '';
   var mu = V[4];
   if (mu && mu.ver === 1 && mu.data.length >= 49) {                      // PAD MUTE: banco + 48 stati (bit0 mute, bit1 solo, bit2 zittito)
-    html += '<div class="ttl"><span>PAD MUTE</span><span>tutti i banchi</span></div>';
+    html += '<div class="ttl"><span>PAD MUTE</span><span>all banks</span></div>';
     for (var b = 0; b < 4; b++) {
       html += '<div class="mrow' + (b === mu.data[0] ? ' cur' : '') + '"><div class="bk">' + 'ABCD'[b] + '</div>';
       for (var p = 0; p < 12; p++) {
@@ -437,17 +437,17 @@ function drawviews() {
       html += '</div>';
     }
   }
-  $('vMute').innerHTML = html || none('PAD MUTE', 'carica Pad Mute (SHIFT + TRACK MUTE)');
+  $('vMute').innerHTML = html || none('PAD MUTE', 'load Pad Mute (SHIFT + TRACK MUTE)');
 }
 draw(); drawPads(); drawviews(); fkeys(); drawMixer();
 function connect() {
-  $('go').className = 'on'; $('go').textContent = '● Collegato';
+  $('go').className = 'on'; $('go').textContent = '● Connected';
   if (window.O5Native) {                                         // dentro la companion app: MIDI nativo (CoreMIDI)
     window.O5Native.start(function (bytes) { link.feedStream(bytes); }, function (info) { st.textContent = info; });
     link.setSender(function (m) { window.O5Native.send(m); });
     return;
   }
-  link.on('ports', function (p) { st.textContent = p.inputs.length ? 'in ascolto su: ' + p.inputs.join(', ') : 'nessun ingresso MIDI trovato'; });
+  link.on('ports', function (p) { st.textContent = p.inputs.length ? 'listening on: ' + p.inputs.join(', ') : 'no MIDI input found'; });
   link.connectWebMidi().catch(function (err) { st.textContent = String(err.message || err); });
 }
 $('go').onclick = connect;
