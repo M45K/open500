@@ -173,6 +173,55 @@
     });
   };
 
+  /* ---- MPC500 OS 1.31 memory, READ ONLY through PEEK (addresses used by the official add-ons on hardware) ---- */
+  var OS = { PROG_BASE: 0x8837B5AC, PROG_IDX: 0x8847C0E2, PROG_STRIDE: 0x1F98, PAD_OFF: 0x18, PAD_SIZE: 0xA4, LAYER: 0x18,
+             BANK: 0x8849C98C, MGR: 0x8848ED30 };                        // MGR: [0] sample list, [1] limit, [2] current sample
+  function u32(b, i) { return (b[i] | b[i + 1] << 8 | b[i + 2] << 16 | b[i + 3] << 24) >>> 0; }
+  function cstr(b, i, n) {
+    var s = ''; for (var k = i; k < i + n && b[k]; k++) s += b[k] >= 32 && b[k] < 127 ? String.fromCharCode(b[k]) : '?';
+    return s.replace(/\s+$/, '');
+  }
+  /* program, bank and the sample name on each pad (first layer with a name). banks: e.g. [0] = only bank A */
+  Link.prototype.readProgram = function (banks) {
+    var self = this, out = { program: 0, bank: 0, pads: {} };
+    return this.peek(OS.PROG_IDX, 2).then(function (b) {
+      out.program = b[0] | b[1] << 8;
+      return self.peek(OS.BANK, 1);
+    }).then(function (b) {
+      out.bank = b[0] & 3;
+      var prog = OS.PROG_BASE + out.program * OS.PROG_STRIDE, chain = Promise.resolve();
+      (banks || [out.bank]).forEach(function (bk) {
+        for (var p = bk * 12; p < bk * 12 + 12; p++) (function (p) {
+          var pad = prog + OS.PAD_OFF + p * OS.PAD_SIZE;                  // PEEK reads at most 32 bytes
+          chain = chain.then(function () { return self.peek(pad, 16); }).then(function (b) {
+            return (out.pads[p] = cstr(b, 0, 16)) || self.peek(pad + OS.LAYER, 16).then(function (b) { out.pads[p] = cstr(b, 0, 16); });
+          });
+        })(p);
+      });
+      return chain;
+    }).then(function () { return out; });
+  };
+  /* sample memory: list of blocks {addr, name, frames, size}, current sample, bytes used / total */
+  Link.prototype.readSamples = function () {
+    var self = this, out = { list: [], current: 0, used: 0, total: 0 };
+    return this.peek(OS.MGR, 12).then(function (b) {
+      var head = u32(b, 0), limit = u32(b, 4); out.current = u32(b, 8);
+      if (head < 0x88000000 || limit > 0x98000000 || head >= limit) throw new Error('sample list not found');
+      out.total = limit - head;
+      var walk = function (p) {
+        if (p + 0x1C > limit || out.list.length >= 256) { out.used = p - head; return out; }
+        return self.peek(p, 0x1C).then(function (b) {
+          var size = u32(b, 0);
+          if (!size) { out.used = p - head; return out; }
+          if (size & 3 || size < 0x100 || p + size > limit) throw new Error('bad sample block @' + p.toString(16));
+          out.list.push({ addr: p, name: cstr(b, 4, 16), frames: u32(b, 0x18), size: size });
+          return walk(p + size);
+        });
+      };
+      return walk(head);
+    });
+  };
+
   /* ---- Web MIDI transport (Chrome desktop/Android) ---- */
   Link.prototype.connectWebMidi = function () {
     var self = this;
@@ -190,6 +239,6 @@
     });
   };
 
-  var api = { Link: Link, pack7: pack7, unpack7: unpack7, enc7: enc7, num7: num7, chk: chk };
+  var api = { Link: Link, pack7: pack7, unpack7: unpack7, enc7: enc7, num7: num7, chk: chk, OS: OS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.O5Link = api;
 })(this);

@@ -2,59 +2,168 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <title>MPC500 MIDI Screen</title>
 <style>
-  body { background: #141518; color: #e7e7ea; font: 16px -apple-system, sans-serif; display: flex; flex-direction: column; align-items: center; padding-top: 36px; margin: 0 8px; }
-  .lcd { background: #b9d27a; color: #1f2a12; font: 700 min(34px, 5.4vw)/1.2 ui-monospace, Menlo, monospace; padding: 14px 22px; border-radius: 10px;
-         border: 10px solid #0d0e10; white-space: pre; letter-spacing: 2px; margin-top: 22px; }
-  canvas { width: min(1024px, 96vw); height: auto; background: #1d1f24; border: 1px solid #33363d; border-radius: 10px; }
-  #info { margin-top: 10px; font: 15px ui-monospace, Menlo, monospace; color: #e7e7ea; }
+  /* stile ispirato alle MPC con schermo (Live/X/One): barra di trasporto, pad a sinistra, pannello grande, tasti funzione in basso */
+  * { box-sizing: border-box; }
+  :root { --bg: #0e0f11; --panel: #17181b; --line: #2a2c31; --txt: #e9e9ec; --dim: #7c7f87; --red: #ff3b2f; --cyan: #37c8ff; --yel: #ffc93a; }
+  body { background: var(--bg); color: var(--txt); font: 15px -apple-system, "SF Pro Text", sans-serif; margin: 0; display: flex; flex-direction: column;
+         padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  .mono, .lcd, .pill, .ttl, #info, #st, .bk, .pd, .sp, #slist { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  /* barra di trasporto */
+  #bar { display: flex; flex-wrap: wrap; align-items: stretch; gap: 1px; background: var(--line); border-bottom: 1px solid var(--line); }
+  .pill { background: #1b1c20; padding: 6px 14px; display: flex; flex-direction: column; justify-content: center; min-width: 74px; }
+  .pill small { color: var(--dim); font-size: 10px; letter-spacing: 1.5px; } .pill b { font-size: 20px; font-weight: 700; }
+  .pill.bpm b { color: var(--red); font-size: 26px; } .pill.wide { flex: 1; min-width: 0; } .pill.wide b { font-size: 16px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  #logo { background: var(--red); color: #fff; font: 800 15px -apple-system, sans-serif; letter-spacing: 1px; padding: 0 14px; display: flex; align-items: center; }
+  button#go { background: #1b1c20; color: var(--txt); border: 0; font: 600 14px -apple-system, sans-serif; padding: 0 16px; }
+  button#go.on { color: #4cd964; }
+  /* corpo: pad | pannello */
+  #dash { flex: 1; display: grid; gap: 10px; padding: 10px; grid-template-columns: minmax(0, 1fr); min-height: 0; }
+  #fkeys { position: sticky; bottom: 0; z-index: 2; }
+  /* tablet/computer: tutto in una schermata, il pannello riempie l'altezza */
+  @media (min-width: 900px) {
+    html, body { height: 100%; } body { overflow: hidden; }
+    #dash { grid-template-columns: minmax(330px, 32%) minmax(0, 1fr); }
+    #panel .tab.show { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
+    #panel .tab[data-tab=sample].show canvas { flex: 1; min-height: 0; }
+  }
+  @media (max-width: 899px) {
+    .pill { min-width: 0; flex: 1; padding: 5px 8px; } .pill b { font-size: 16px; } .pill.bpm b { font-size: 20px; } .pill.wide { flex-basis: 100%; }
+    #logo { display: none; } canvas { aspect-ratio: 2.4; }
+    .lcd { font-size: 4.6vw; } button#go { flex-basis: 100%; padding: 8px; }
+  }
+  section > * { min-width: 0; max-width: 100%; }
+  @media (min-width: 900px) { .gs { height: clamp(22px, 4vh, 40px); } .pd { height: clamp(38px, 6vh, 60px); } }
+  section { min-width: 0; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+  .ttl { color: var(--dim); font-size: 11px; letter-spacing: 1.5px; margin-bottom: 8px; display: flex; justify-content: space-between; gap: 8px; }
+  .ttl span:first-child { color: var(--txt); font-weight: 700; }
+  .lcd { background: #b9d27a; color: #1f2a12; font-weight: 700; font-size: clamp(14px, 1.9vw, 22px); line-height: 1.25; padding: 6px 10px;
+         border-radius: 7px; border: 5px solid #050506; white-space: pre; letter-spacing: 1px; text-align: center; overflow: hidden; }
   .lcd .cur { background: #1f2a12; color: #b9d27a; border-radius: 3px; }
-  #st { margin-top: 14px; color: #9a9ca3; font: 13px ui-monospace, Menlo, monospace; }
-  button { margin-top: 16px; font-size: 16px; padding: 8px 16px; }
-  #views { margin-top: 18px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-  .vtitle { color: #9a9ca3; font: 13px ui-monospace, Menlo, monospace; }
-  .mrow { display: grid; grid-template-columns: 28px repeat(12, min(52px, 6.5vw)); gap: 5px; align-items: center; }
-  .mrow.cur .bk { color: #e7e7ea; font-weight: 700; }
-  .bk { color: #6a6c73; font: 14px ui-monospace, Menlo, monospace; text-align: center; }
-  .pd { height: min(40px, 6vw); border-radius: 6px; background: #3f8f4e; color: #0d0e10; font: 700 12px ui-monospace, Menlo, monospace;
-        display: flex; align-items: center; justify-content: center; }
-  .grow { display: grid; grid-template-columns: 40px repeat(16, min(30px, 4.6vw)); gap: 3px; align-items: center; }
-  .gs { height: min(22px, 4vw); border-radius: 4px; background: #2a2c31; } .gs.q { background: #34373e; }
-  .gs.on { background: #ff4a3d; } .gs.cur { outline: 2px solid #e7e7ea; } .bk.selp { color: #ff4a3d; font-weight: 700; }
-  .srow { display: grid; grid-template-columns: repeat(12, min(52px, 7vw)); gap: 5px; }
-  .sp { background: #2a2c31; border-radius: 6px; text-align: center; padding: 6px 0; font: 13px ui-monospace, Menlo, monospace; }
-  .sp b { display: block; font-size: 16px; color: #e0c04a; } .sp span { color: #8a8c93; font-size: 11px; }
-  .pd.m { background: #c8453a; } .pd.s { background: #e0c04a; } .pd.z { background: #3a3c42; color: #8a8c93; }
+  /* pad */
+  #banks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  #banks div { text-align: center; padding: 7px 0; border-radius: 6px; background: #222428; color: var(--dim); font: 700 13px -apple-system, sans-serif; cursor: pointer; }
+  #banks div.mpc { color: var(--txt); } #banks div.sel { background: #33100e; color: var(--red); box-shadow: inset 0 0 0 1px var(--red); }
+  #pads { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+  .pad { aspect-ratio: 1.25; background: linear-gradient(#2a2c31, #222428); border-radius: 8px; padding: 7px 8px; display: flex; flex-direction: column;
+         justify-content: space-between; min-width: 0; box-shadow: inset 0 -3px 0 #34363c; }
+  .pad.has { box-shadow: inset 0 -3px 0 var(--cyan); }
+  .pad .n { font: 700 11px ui-monospace, Menlo, monospace; color: var(--dim); display: flex; justify-content: space-between; align-items: center; }
+  .pad .nm { font: 600 clamp(12px, 1.35vw, 15px) -apple-system, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pad .nm.empty { color: #4d5057; font-weight: 400; }
+  .pad .nt { color: var(--yel); font-size: 13px; }
+  .pad.m { background: linear-gradient(#3a1513, #2a1110); box-shadow: inset 0 -3px 0 var(--red); } .pad.m .nm { color: #c77; }
+  .pad.s { box-shadow: inset 0 0 0 2px var(--yel); } .pad.z { opacity: .4; }
+  .pad .bd { border-radius: 3px; padding: 0 4px; color: #000; font-size: 10px; } .bd.m { background: var(--red); } .bd.s { background: var(--yel); }
+  .pad .dots { display: flex; gap: 2px; height: 4px; } .pad .dots i { flex: 1; background: #3a3c42; border-radius: 2px; } .pad .dots i.on { background: var(--red); }
+  /* pannello a schede */
+  .tab { display: none; } .tab.show { display: block; }
+  #panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  #fkeys { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  #fkeys div { background: #1b1c20; text-align: center; padding: 11px 0 12px; font: 700 12px -apple-system, sans-serif; letter-spacing: 1px; color: var(--dim); cursor: pointer; position: relative; }
+  #fkeys div.sel { color: var(--txt); background: #222327; } #fkeys div.sel::after { content: ''; position: absolute; left: 20%; right: 20%; top: 0; height: 3px; background: var(--red); border-radius: 0 0 3px 3px; }
+  #fkeys div.live::before { content: '●'; color: var(--red); margin-right: 5px; font-size: 9px; vertical-align: 2px; }
+  canvas { width: 100%; height: auto; background: #08090a; border-radius: 6px; display: block; }
+  #info { margin-top: 8px; font-size: 13px; color: #c9cbd1; display: flex; flex-wrap: wrap; gap: 6px 18px; }
+  #info b { color: var(--dim); font-weight: 400; margin-right: 5px; }
+  .empty-note { color: var(--dim); padding: 30px 0; text-align: center; }
+  .mrow { display: grid; grid-template-columns: 24px repeat(12, 1fr); gap: 4px; align-items: center; margin-bottom: 5px; }
+  .mrow.cur .bk { color: var(--txt); font-weight: 700; }
+  .bk { color: var(--dim); font-size: 13px; text-align: center; }
+  .pd { height: 38px; border-radius: 5px; background: #2a2c31; box-shadow: inset 0 -3px 0 #3f8f4e; color: var(--txt); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .pd.m { background: #3a1513; box-shadow: inset 0 -3px 0 var(--red); } .pd.s { box-shadow: inset 0 0 0 2px var(--yel); } .pd.z { opacity: .4; }
+  .grow { display: grid; grid-template-columns: 44px repeat(16, 1fr); gap: 3px; align-items: center; margin-bottom: 3px; }
+  .gs { height: 22px; border-radius: 3px; background: #24262b; } .gs.q { background: #2e3036; }
+  .gs.on { background: var(--red); } .gs.cur { outline: 2px solid var(--txt); } .bk.selp { color: var(--red); font-weight: 700; }
+  .srow { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .sp { background: #24262b; border-radius: 6px; text-align: center; padding: 10px 0; font-size: 13px; }
+  .sp b { display: block; font-size: 22px; color: var(--yel); } .sp span { color: var(--dim); font-size: 11px; }
+  .meter { height: 12px; background: #24262b; border-radius: 6px; overflow: hidden; } .meter div { height: 100%; background: linear-gradient(90deg, #3f8f4e, var(--cyan)); }
+  #slist { margin-top: 10px; font-size: 13px; columns: 2 260px; }
+  #slist div { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; padding: 4px 6px; border-radius: 5px; color: #b5b7bd; break-inside: avoid; }
+  #slist div.cur { background: #33100e; color: #ff8a7d; } #slist span { color: var(--dim); }
+  #st { color: #55585f; font-size: 11px; padding: 4px 10px; }
 </style>
 </head>
 <body>
-<canvas id="wv" width="1024" height="260"></canvas>
-<div id="info">nessun sample</div>
-<div class="lcd" id="lcd">
+<div id="bar">
+  <div id="logo">MPC500</div>
+  <div class="pill"><small>SEQ</small><b id="pSeq">--</b></div>
+  <div class="pill bpm"><small>BPM</small><b id="pBpm">--</b></div>
+  <div class="pill"><small>BAR</small><b id="pBar">--</b></div>
+  <div class="pill"><small>PROGRAM</small><b id="pPgm">--</b></div>
+  <div class="pill"><small>BANK</small><b id="pBank">-</b></div>
+  <div class="pill wide"><small>SAMPLE</small><b id="pSmp">--</b></div>
+  <button id="go">Collega</button>
+</div>
+<div id="dash">
+  <section>
+    <div class="lcd" id="lcd">
                 </div>
-<div id="views"></div>
+    <div class="card">
+      <div class="ttl"><span>PADS</span><span id="padsSrc">program: in attesa</span></div>
+      <div id="banks"></div>
+      <div id="pads"></div>
+    </div>
+    <div class="card" id="memMini" style="cursor:pointer">
+      <div class="ttl"><span>MEMORY</span><span id="memTxt2">--</span></div>
+      <div class="meter"><div id="memBar2" style="width:0"></div></div>
+    </div>
+  </section>
+  <section id="panel">
+    <div class="card tab" data-tab="sample">
+      <div class="ttl"><span>SAMPLE EDIT</span><span id="smpName"></span></div>
+      <canvas id="wv" width="1600" height="560"></canvas><div id="info">nessun sample</div>
+    </div>
+    <div class="card tab" data-tab="grid"><div id="vGrid"></div></div>
+    <div class="card tab" data-tab="scale"><div id="vScale"></div></div>
+    <div class="card tab" data-tab="mute"><div id="vMute"></div></div>
+    <div class="card tab" data-tab="memory">
+      <div class="ttl"><span>MEMORY</span><span id="memTxt">--</span></div>
+      <div class="meter"><div id="memBar" style="width:0"></div></div>
+      <div id="slist"></div>
+    </div>
+  </section>
+</div>
+<div id="fkeys">
+  <div data-k="auto">AUTO</div><div data-k="sample">SAMPLE</div><div data-k="grid">GRID</div>
+  <div data-k="scale">SCALE</div><div data-k="mute">MUTE</div><div data-k="memory">MEMORY</div>
+</div>
 <div id="st">premi "Collega" (Chrome: consenti i messaggi SysEx)</div>
-<button id="go">Collega</button>
 <script src="o5link.js"></script>
 <script>
-// Schermo remoto Open500: tutto il protocollo e' in o5link.js; qui solo il disegno.
+// Schermo remoto Open500: il protocollo e' in o5link.js; qui il disegno e le letture periodiche (PEEK, sola lettura).
 // Trasporto: Web MIDI (Chrome desktop/Android) oppure il ponte nativo della companion app (window.O5Native).
-var cv = document.getElementById('wv'), g = cv.getContext('2d'), lcd = document.getElementById('lcd'),
-    info = document.getElementById('info'), st = document.getElementById('st'), vbox = document.getElementById('views');
+var $ = function (id) { return document.getElementById(id); };
+var cv = $('wv'), g = cv.getContext('2d'), lcd = $('lcd'), info = $('info'), st = $('st');
 var link = new O5Link.Link();
 var S = { peaks: new Array(256).fill(0), have: new Array(8).fill(false), trim: null, chops: [], play: null, sig: -1 };
+var M = { program: -1, bank: -1, showBank: -1, pads: {}, samples: null, lcd: {} };   // stato letto dall'MPC
 function ch(c) { return c === 0x7F ? '█' : c < 8 ? '□' : String.fromCharCode(c); }
-function newsig(s) { if (s !== S.sig) { S.sig = s; S.trim = null; S.chops = []; S.play = null; } }
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+function newsig(s) { if (s !== S.sig) { S.sig = s; S.trim = null; S.chops = []; S.play = null; R.samplesAt = 0; } }
+function secs(f) { return (f / 44100).toFixed(f < 441000 ? 2 : 1) + ' s'; }
+
+// ---------------- forma d'onda ----------------
+var DPR = 1;
+function fit() {                                                   // canvas = pixel reali dello spazio che occupa
+  var r = window.devicePixelRatio || 1, w = Math.round(cv.clientWidth * r), h = Math.round(cv.clientHeight * r);
+  if (w > 0 && h > 0 && (cv.width !== w || cv.height !== h)) { cv.width = w; cv.height = h; }
+  DPR = r;
+}
+window.addEventListener('resize', function () { draw(); });
 function draw() {
+  fit();
   var W = cv.width, H = cv.height, mid = H / 2, cw = W / 256, trim = S.trim, play = S.play, chops = S.chops;
   g.clearRect(0, 0, W, H);
   var x0 = 0, x1 = W;
   if (trim && trim.len > 0) { x0 = trim.start / trim.len * W; x1 = (trim.end + 1) / trim.len * W; }
   for (var c = 0; c < 256; c++) {
-    var x = c * cw, h = S.peaks[c] / 127 * (H / 2 - 6), inside = x + cw > x0 && x < x1;
+    var x = c * cw, h = S.peaks[c] / 127 * (H / 2 - 8), inside = x + cw > x0 && x < x1;
     g.fillStyle = !S.have[c >> 5] ? '#2a2c31' : inside ? '#ff4a3d' : '#5a3a38';
     g.fillRect(x, mid - h, Math.max(cw - 1, 1), Math.max(2 * h, 1));
   }
@@ -66,49 +175,186 @@ function draw() {
       var p0 = play.start / trim.len * W, p1 = (play.end + 1) / trim.len * W;
       g.fillStyle = 'rgba(127,212,255,0.22)'; g.fillRect(p0, 0, p1 - p0, H);
       var pos = Math.min(play.end, play.start + (performance.now() - play.t0) / 1000 * 44100);
-      g.fillStyle = '#ffffff'; g.fillRect(pos / trim.len * W - 1, 0, 2, H);
+      g.fillStyle = '#ffffff'; g.fillRect(pos / trim.len * W - 1, 0, 3, H);
     }
     for (var q = 0; q < chops.length; q++) {                       // tagli: linea + numero della fetta (= pad)
       var xc = chops[q] / trim.len * W, on = play && play.slice === q;
-      g.fillStyle = on ? '#ffffff' : '#7fd4ff'; g.fillRect(xc - 1, 22, 2, H - 22);
-      g.font = (on ? 'bold 15px' : 'bold 12px') + ' Menlo, monospace'; g.fillText(String(q + 1), xc + 3, H - 6);
+      g.fillStyle = on ? '#ffffff' : '#7fd4ff'; g.fillRect(xc - DPR, 20 * DPR, 2 * DPR, H - 20 * DPR);
+      g.font = 'bold ' + Math.round((on ? 15 : 12) * DPR) + 'px Menlo, monospace'; g.fillText(String(q + 1), xc + 4 * DPR, H - 6 * DPR);
     }
-    g.font = '13px Menlo, monospace'; g.fillStyle = '#6cc070'; g.fillText('START', x0 + 5, 16);
-    g.fillStyle = '#e0a84a'; g.fillText('END', Math.max(x1 - 32, x0 + 50), 16);
-    var sec = function (f) { return (f / 44100).toFixed(3) + ' s'; };
-    info.textContent = (chops.length ? 'Trans-Chop: ' + chops.length + ' fette   ' : '') + 'start ' + trim.start + ' (' + sec(trim.start) + ')   end ' + trim.end + ' (' + sec(trim.end) +
-      ')   regione ' + sec(trim.end - trim.start + 1) + '   lunghezza ' + trim.len;
+    g.font = Math.round(12 * DPR) + 'px Menlo, monospace'; g.fillStyle = '#6cc070'; g.fillText('START', x0 + 5 * DPR, 15 * DPR);
+    g.fillStyle = '#e0a84a'; g.fillText('END', Math.max(x1 - 30 * DPR, x0 + 50 * DPR), 15 * DPR);
+    var it = function (k, v) { return '<span><b>' + k + '</b>' + v + '</span>'; };
+    info.innerHTML = (chops.length ? it('SLICES', chops.length) : '') + it('START', trim.start + ' · ' + secs(trim.start)) +
+      it('END', trim.end + ' · ' + secs(trim.end)) + it('REGION', secs(trim.end - trim.start + 1)) + it('LENGTH', secs(trim.len));
   } else info.textContent = 'nessun sample';
 }
 function anim() { draw(); if (S.play) requestAnimationFrame(anim); }
+
+// ---------------- display + barra di stato ----------------
 link.on('display', function (d) {
-  var s = '';
+  var s = '', t = '';
   for (var i = 0; i < 32; i++) {
-    var c = ch(d.text[i]).replace('&', '&amp;').replace('<', '&lt;');
-    s += i === d.cursor ? '<span class="cur">' + c + '</span>' : c; if (i === 15) s += '\n';
+    var c = ch(d.text[i]); t += c;
+    s += i === d.cursor ? '<span class="cur">' + esc(c) + '</span>' : esc(c); if (i === 15) s += '\n';
   }
   lcd.innerHTML = s;
+  var m;                                                           // valori che l'OS mostra in MAIN: li teniamo anche fuori da MAIN
+  if ((m = /SEQ:?\s*(\d+)/.exec(t))) M.lcd.seq = m[1];
+  if ((m = /BPM\s*(\d+(\.\d)?)/.exec(t))) M.lcd.bpm = m[1];
+  if ((m = /BAR\s*(\d+)/.exec(t))) M.lcd.bar = m[1];
+  bar();
 });
-link.on('wave', function (w) { newsig(w.sig); S.peaks = w.peaks; S.have = w.have; draw(); });
-link.on('trim', function (t) { newsig(t.sig); S.trim = t; draw(); });
-link.on('chop', function (c) { newsig(c.sig); S.chops = c.positions; draw(); });
+function bar() {
+  var gr = link.views[2], sq = link.views[9], nb = sq && sq.data.length >= 2 ? sq.data[0] | sq.data[1] << 8 : gr ? gr.data[0] | gr.data[1] << 8 : 0;
+  $('pSeq').textContent = M.lcd.seq || '--';
+  $('pBpm').textContent = M.lcd.bpm || '--';
+  $('pBar').textContent = (M.lcd.bar || (gr ? gr.data[2] : '--')) + (nb ? '/' + nb : '');
+  $('pPgm').textContent = M.program >= 0 ? ('0' + (M.program + 1)).slice(-2) : '--';
+  $('pBank').textContent = M.bank >= 0 ? 'ABCD'[M.bank] : '-';
+  var cur = M.samples && M.samples.list.filter(function (x) { return x.addr === M.samples.current; })[0];
+  $('pSmp').textContent = cur ? cur.name + '  ' + secs(cur.frames) : S.trim ? secs(S.trim.len) : '--';
+  $('smpName').textContent = cur ? cur.name : '';
+}
+
+// ---------------- pad ----------------
+var ORDER = [9, 10, 11, 6, 7, 8, 3, 4, 5, 0, 1, 2];                 // come sull'MPC: 10 11 12 in alto, 1 2 3 in basso
+var NOTE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+var SCALES = ['MAJOR', 'MINOR', 'DORIAN', 'PHRYG', 'LYDIAN', 'MIXOLYD', 'HARMMIN', 'PENTMAJ', 'PENTMIN', 'BLUES', 'CHROMA'];
+function s8(x) { return x > 127 ? x - 256 : x; }
+function viewBank() {
+  if (M.showBank >= 0) return M.showBank;
+  if (M.bank >= 0) return M.bank;
+  var mu = link.views[4]; return mu && mu.data.length ? mu.data[0] & 3 : 0;
+}
+function drawPads() {
+  var b = viewBank(), V = link.views, mu = V[4], sc = V[3], gr = V[2], html = '', tabs = '';
+  for (var k = 0; k < 4; k++) tabs += '<div class="' + (k === b ? 'sel ' : '') + (k === M.bank ? 'mpc' : '') + '" data-b="' + k + '">' + 'ABCD'[k] + '</div>';
+  $('banks').innerHTML = tabs;
+  var scale = sc && sc.ver === 1 && sc.data.length >= 17 && sc.data[2] === b ? sc.data : null;
+  var grid = gr && gr.ver === 1 && gr.data.length >= 32 && gr.data[5] === b ? gr.data : null;
+  ORDER.forEach(function (i) {
+    var p = b * 12 + i, f = mu && mu.ver === 1 && mu.data.length >= 49 ? mu.data[1 + p] : 0, nm = M.pads[p];
+    var cls = f & 2 ? ' s' : f & 1 ? ' m' : f & 4 ? ' z' : '';
+    var badge = f & 2 ? '<span class="bd s">SOLO</span>' : f & 1 ? '<span class="bd m">MUTE</span>' : '';
+    var note = scale ? NOTE[((s8(scale[5 + i]) % 12) + 12) % 12] : '';
+    var dots = '';
+    if (grid) { var mask = grid[8 + 2 * i] | grid[9 + 2 * i] << 8; dots = '<div class="dots">'; for (var s = 0; s < 16; s++) dots += '<i' + (mask >> s & 1 ? ' class="on"' : '') + '></i>'; dots += '</div>'; }
+    html += '<div class="pad' + cls + '"><div class="n"><span>' + 'ABCD'[b] + ('0' + (i + 1)).slice(-2) + '</span>' + badge + '<span class="nt">' + note + '</span></div>' +
+            '<div class="nm' + (nm ? '' : ' empty') + '">' + (nm === undefined ? '…' : nm ? esc(nm) : 'vuoto') + '</div>' + dots + '</div>';
+  });
+  $('pads').innerHTML = html;
+}
+$('banks').onclick = function (e) {                                // solo vista: il banco dell'MPC non cambia
+  var k = e.target.getAttribute('data-b'); if (k === null) return;
+  M.showBank = +k === M.bank ? -1 : +k; drawPads();
+};
+
+// ---------------- memoria sample ----------------
+function drawSamples() {
+  var s = M.samples; if (!s) return;
+  var mb = function (x) { return (x / 1048576).toFixed(1) + ' MB'; };
+  $('memTxt').textContent = s.list.length + ' sample, liberi ' + mb(s.total - s.used) + ' su ' + mb(s.total);
+  $('memBar').style.width = $('memBar2').style.width = Math.min(100, s.used / s.total * 100).toFixed(1) + '%';
+  $('memTxt2').textContent = 'liberi ' + mb(s.total - s.used);
+  $('slist').innerHTML = s.list.map(function (x) {
+    return '<div' + (x.addr === s.current ? ' class="cur"' : '') + '><b>' + esc(x.name || '?') + '</b><span>' + secs(x.frames) + '</span><span>' + Math.round(x.size / 1024) + ' KB</span></div>';
+  }).join('');
+}
+
+// ---------------- letture periodiche (PEEK: servono MIDI IN o USB) ----------------
+var R = { busy: false, until: 0, namesAt: 0, samplesAt: 0 };
+function poll() {
+  if (!link.send || R.busy || Date.now() < R.until) return;
+  R.busy = true;
+  var now = Date.now();
+  link.readProgram([]).then(function (p) {
+    var changed = p.program !== M.program;
+    if (changed) M.pads = {};
+    M.program = p.program; M.bank = p.bank;
+    var banks = changed ? [p.bank, 0, 1, 2, 3].filter(function (x, i, a) { return a.indexOf(x) === i; }) : now - R.namesAt > 6000 ? [viewBank()] : [];
+    if (changed || banks.length) { bar(); drawPads(); }
+    return banks.reduce(function (ch_, bk) {
+      return ch_.then(function () { return link.readProgram([bk]); }).then(function (q) { for (var k in q.pads) M.pads[k] = q.pads[k]; drawPads(); });
+    }, Promise.resolve()).then(function () { if (banks.length) R.namesAt = now; });
+  }).then(function () {
+    if (now - R.samplesAt < 15000) return;
+    return link.readSamples().then(function (s) { M.samples = s; R.samplesAt = now; drawSamples(); bar(); fkeys(); });
+  }).then(function () {
+    $('padsSrc').textContent = 'program ' + (M.program + 1) + (M.showBank >= 0 && M.showBank !== M.bank ? ' (vista banco ' + 'ABCD'[M.showBank] + ')' : '');
+  }).catch(function (e) {
+    R.until = Date.now() + 10000;
+    $('padsSrc').textContent = 'nessuna risposta: serve il cavo USB o il MIDI IN';
+  }).then(function () { R.busy = false; });
+}
+setInterval(poll, 1500);
+
+// ---------------- eventi dal protocollo ----------------
+link.on('wave', function (w) { if (w.sig !== S.sig) act('sample'); newsig(w.sig); S.peaks = w.peaks; S.have = w.have; draw(); });
+link.on('trim', function (t) {
+  if (!S.trim || t.start !== S.trim.start || t.end !== S.trim.end || t.sig !== S.sig) act('sample');
+  newsig(t.sig); S.trim = t; draw(); bar();
+});
+link.on('chop', function (c) { newsig(c.sig); if (c.positions.join() !== S.chops.join()) act('sample'); S.chops = c.positions; draw(); });
 link.on('play', function (p) {
-  newsig(p.sig); S.play = p.on ? { slice: p.slice, start: p.start, end: p.end, t0: performance.now() } : null;
+  newsig(p.sig); if (p.on) act('sample'); S.play = p.on ? { slice: p.slice, start: p.start, end: p.end, t0: performance.now() } : null;
   if (S.play) anim(); else draw();
 });
 link.on('stats', function (x) {
   st.textContent = 'pacchetti ' + x.ok + '  rovinati ' + x.bad + '  sample #' + S.sig + '  ' + new Date().toLocaleTimeString();
 });
-// ---- viste degli add-on (docs/PROTOCOL.md §5) ----
-var NOTE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-var SCALES = ['MAJOR', 'MINOR', 'DORIAN', 'PHRYG', 'LYDIAN', 'MIXOLYD', 'HARMMIN', 'PENTMAJ', 'PENTMIN', 'BLUES', 'CHROMA'];
-function s8(x) { return x > 127 ? x - 256 : x; }
-link.on('view', drawviews);
+var VTAB = { 2: 'grid', 3: 'scale', 4: 'mute' }, lastView = {};
+link.on('view', function (v) {
+  var key = v.data.join(), was = lastView[v.view]; lastView[v.view] = key;
+  if (VTAB[v.view] && was !== undefined && was !== key) act(VTAB[v.view]);   // cambia sull'MPC -> AUTO ci va
+  drawviews(); drawPads(); bar(); fkeys();
+});
+// ---------------- tasti funzione: AUTO segue l'ultima cosa che cambia sull'MPC; toccando una scheda la blocchi ----------------
+var T = { pin: 'auto', auto: 'sample' };
+function act(tab) { T.auto = tab; fkeys(); }
+function fkeys() {
+  var cur = T.pin === 'auto' ? T.auto : T.pin, V = link.views;
+  var has = { sample: S.have.some(Boolean) || !!S.trim, grid: !!V[2], scale: !!V[3], mute: !!V[4], memory: !!M.samples };
+  [].forEach.call(document.querySelectorAll('#fkeys div'), function (d) {
+    var k = d.getAttribute('data-k');
+    d.className = (k === T.pin ? 'sel' : '') + (has[k] ? ' live' : '');
+    if (k === 'auto') d.textContent = T.pin === 'auto' ? 'AUTO · ' + cur.toUpperCase() : 'AUTO';
+  });
+  [].forEach.call(document.querySelectorAll('.tab'), function (d) { d.classList.toggle('show', d.getAttribute('data-tab') === cur); });
+  if (cur === 'sample') draw();
+}
+$('memMini').onclick = function () { T.pin = 'memory'; fkeys(); };
+$('fkeys').onclick = function (e) { var k = e.target.getAttribute('data-k'); if (k) { T.pin = k; fkeys(); } };
 function drawviews() {
-  var V = link.views, html = '';
+  var V = link.views, html = '', none = function (t, w) { return '<div class="ttl"><span>' + t + '</span></div><div class="empty-note">' + w + '</div>'; };
+  var gr = V[2];
+  if (gr && gr.ver === 1 && gr.data.length >= 32) {                      // GRID SEQ: 12 pad x 16 step della battuta
+    var d = gr.data, bars = d[0] | d[1] << 8, bank = d[5];
+    html += '<div class="ttl"><span>GRID SEQ</span><span>bar ' + d[2] + '/' + bars + '  step ' + d[3] + '  track ' + (d[7] + 1) + '</span></div>';
+    for (var r = 11; r >= 0; r--) {
+      var mask = d[8 + 2 * r] | d[9 + 2 * r] << 8, sel = bank * 12 + r === d[4];
+      html += '<div class="grow"><div class="bk' + (sel ? ' selp' : '') + '">' + 'ABCD'[bank] + ('0' + (r + 1)).slice(-2) + '</div>';
+      for (var k = 0; k < 16; k++)
+        html += '<div class="gs' + (mask >> k & 1 ? ' on' : '') + (k % 4 === 0 ? ' q' : '') + (sel && k === d[3] - 1 && !d[6] ? ' cur' : '') + '"></div>';
+      html += '</div>';
+    }
+  }
+  $('vGrid').innerHTML = html || none('GRID SEQ', 'apri Grid Seq sull\'MPC (MODE → OTHER)'); html = '';
+  var sc = V[3];
+  if (sc && sc.ver === 1 && sc.data.length >= 17) {                      // SCALE PADS: scala, tonalita', 12 note
+    var dd = sc.data, ks = dd[1] <= 6 ? dd[1] : dd[1] - 12;
+    html += '<div class="ttl"><span>SCALE PADS</span><span>' + NOTE[dd[1]] + ' ' + (SCALES[dd[0]] || '?') + ' → bank ' + 'ABCD'[dd[2]] +
+            (dd[3] === 2 ? '  (source ' + 'ABCD'[(dd[4] / 12) | 0] + ('0' + (dd[4] % 12 + 1)).slice(-2) + ', DO IT?)' : '') + '</span></div><div class="srow">';
+    for (var i = 0; i < 12; i++) {
+      var semi = s8(dd[5 + i]), oct = Math.floor((semi - ks) / 12);          // ottava contata dalla tonica (pad 1)
+      html += '<div class="sp"><b>' + NOTE[((semi % 12) + 12) % 12] + '</b><span>' + (i + 1) + (oct ? (oct > 0 ? ' +' : ' ') + oct : '') + '</span></div>';
+    }
+    html += '</div>';
+  }
+  $('vScale').innerHTML = html || none('SCALE PADS', 'apri Scale Pads sull\'MPC'); html = '';
   var mu = V[4];
   if (mu && mu.ver === 1 && mu.data.length >= 49) {                      // PAD MUTE: banco + 48 stati (bit0 mute, bit1 solo, bit2 zittito)
-    html += '<div class="vtitle">PAD MUTE</div>';
+    html += '<div class="ttl"><span>PAD MUTE</span><span>tutti i banchi</span></div>';
     for (var b = 0; b < 4; b++) {
       html += '<div class="mrow' + (b === mu.data[0] ? ' cur' : '') + '"><div class="bk">' + 'ABCD'[b] + '</div>';
       for (var p = 0; p < 12; p++) {
@@ -118,36 +364,11 @@ function drawviews() {
       html += '</div>';
     }
   }
-  var gr = V[2];
-  if (gr && gr.ver === 1 && gr.data.length >= 32) {                      // GRID SEQ: 12 pad x 16 step della battuta
-    var d = gr.data, bars = d[0] | d[1] << 8, bank = d[5];
-    html += '<div class="vtitle">GRID SEQ — bar ' + d[2] + '/' + bars + '  step ' + d[3] + '  track ' + (d[7] + 1) + '</div>';
-    for (var r = 11; r >= 0; r--) {
-      var mask = d[8 + 2 * r] | d[9 + 2 * r] << 8, sel = bank * 12 + r === d[4];
-      html += '<div class="grow"><div class="bk' + (sel ? ' selp' : '') + '">' + 'ABCD'[bank] + ('0' + (r + 1)).slice(-2) + '</div>';
-      for (var k = 0; k < 16; k++)
-        html += '<div class="gs' + (mask >> k & 1 ? ' on' : '') + (k % 4 === 0 ? ' q' : '') + (sel && k === d[3] - 1 && !d[6] ? ' cur' : '') + '"></div>';
-      html += '</div>';
-    }
-  }
-  var sc = V[3];
-  if (sc && sc.ver === 1 && sc.data.length >= 17) {                      // SCALE PADS: scala, tonalita', 12 note
-    var dd = sc.data, ks = dd[1] <= 6 ? dd[1] : dd[1] - 12;
-    html += '<div class="vtitle">SCALE PADS — ' + NOTE[dd[1]] + ' ' + (SCALES[dd[0]] || '?') + ' → bank ' + 'ABCD'[dd[2]] +
-            (dd[3] === 2 ? '  (source ' + 'ABCD'[(dd[4] / 12) | 0] + ('0' + (dd[4] % 12 + 1)).slice(-2) + ', DO IT?)' : '') + '</div><div class="srow">';
-    for (var i = 0; i < 12; i++) {
-      var semi = s8(dd[5 + i]), oct = Math.floor((semi - ks) / 12);          // ottava contata dalla tonica (pad 1)
-      html += '<div class="sp"><b>' + NOTE[((semi % 12) + 12) % 12] + '</b><span>' + (i + 1) + (oct ? (oct > 0 ? ' +' : ' ') + oct : '') + '</span></div>';
-    }
-    html += '</div>';
-  }
-  var sq = V[9];
-  if (sq && sq.ver === 1 && sq.data.length >= 4)
-    html += '<div class="vtitle">SEQ TOOLS — ' + (sq.data[0] | sq.data[1] << 8) + ' bars, ' + (sq.data[2] | sq.data[3] << 8) + ' events</div>';
-  vbox.innerHTML = html;
+  $('vMute').innerHTML = html || none('PAD MUTE', 'carica Pad Mute (SHIFT + TRACK MUTE)');
 }
-draw();
+draw(); drawPads(); drawviews(); fkeys();
 function connect() {
+  $('go').className = 'on'; $('go').textContent = '● Collegato';
   if (window.O5Native) {                                         // dentro la companion app: MIDI nativo (CoreMIDI)
     window.O5Native.start(function (bytes) { link.feedStream(bytes); }, function (info) { st.textContent = info; });
     link.setSender(function (m) { window.O5Native.send(m); });
@@ -156,8 +377,9 @@ function connect() {
   link.on('ports', function (p) { st.textContent = p.inputs.length ? 'in ascolto su: ' + p.inputs.join(', ') : 'nessun ingresso MIDI trovato'; });
   link.connectWebMidi().catch(function (err) { st.textContent = String(err.message || err); });
 }
-document.getElementById('go').onclick = connect;
-if (window.O5Native) connect();
+$('go').onclick = connect;
+if (/[?&]demo\b/.test(location.search)) { var sd = document.createElement('script'); sd.src = 'screen-demo.js'; document.body.appendChild(sd); }
+else if (window.O5Native) connect();
 </script>
 </body>
 </html>

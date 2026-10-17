@@ -74,3 +74,34 @@ console.log('ok: %d packets decoded, same result per message and as a byte strea
   assert.ok(seen.display && seen.trim && seen.view.some(v => v.view === 4 && v.data.length === 49), JSON.stringify(seen).slice(0, 200));
   console.log('ok: USB stream (%d messages, 1.2 s): display, trim, Pad Mute view decoded, no errors', PU.length);
 })();
+
+// 5) pads, program, bank and sample memory read with PEEK from a fake MPC memory (OS 1.31 layout)
+(async () => {
+  const OS = O5.OS, mem = new Map();
+  const w8 = (a, v) => mem.set(a, v & 0xFF), w32 = (a, v) => { for (let i = 0; i < 4; i++) w8(a + i, v >>> (8 * i)); };
+  const ws = (a, s) => [...s].forEach((c, i) => w8(a + i, c.charCodeAt(0)));
+  w8(OS.PROG_IDX, 2); w8(OS.BANK, 1);                                    // program 3, bank B
+  const prog = OS.PROG_BASE + 2 * OS.PROG_STRIDE, pad = p => prog + OS.PAD_OFF + p * OS.PAD_SIZE;
+  ws(pad(12), 'KICK 909'); ws(pad(14) + OS.LAYER, 'SNARE L2');            // B01 layer 0, B03 only layer 1
+  const head = 0x88680000; let p = head;
+  for (const [nm, fr] of [['HUB', 900], ['KICK 909', 22050], ['LOOP 92', 400000]]) {
+    const size = (0x100 + 2 * fr + 3) & ~3; w32(p, size); ws(p + 4, nm); w32(p + 0x18, fr); p += size;
+  }
+  w32(OS.MGR, head); w32(OS.MGR + 4, 0x8FF20000); w32(OS.MGR + 8, head + ((0x100 + 1800 + 3) & ~3));
+  const L = new O5.Link(); let peeks = 0;
+  L.setSender(msg => {
+    if (msg[2] !== 0x12) return;
+    const a = O5.num7(msg, 4, 5), n = msg[9]; assert.ok(n <= 32, 'PEEK n <= 32'); peeks++;
+    const out = [0xF0, 0x7D, 0x13, msg[3], n];
+    for (let i = 0; i < n; i++) { const b = mem.get(a + i) || 0; out.push(b >> 4, b & 15); }
+    out.push(0xF7); setTimeout(() => L.feed(Uint8Array.from(out)), 1);
+  });
+  const P = await L.readProgram();
+  assert.strictEqual(P.program, 2); assert.strictEqual(P.bank, 1);
+  assert.deepStrictEqual([P.pads[12], P.pads[13], P.pads[14]], ['KICK 909', '', 'SNARE L2']);
+  assert.ok(!(0 in P.pads) && Object.keys(P.pads).length === 12);
+  const S = await L.readSamples();
+  assert.deepStrictEqual(S.list.map(s => [s.name, s.frames]), [['HUB', 900], ['KICK 909', 22050], ['LOOP 92', 400000]]);
+  assert.strictEqual(S.current, S.list[1].addr); assert.strictEqual(S.used, p - head); assert.strictEqual(S.total, 0x8FF20000 - head);
+  console.log('ok: program/bank/pad names and sample memory via PEEK (%d requests, all <= 32 bytes)', peeks);
+})().catch(e => { console.error(e); process.exit(1); });
