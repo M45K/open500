@@ -18,7 +18,15 @@
   w32(OS.MGR, head); w32(OS.MGR + 4, 0x8FF20000); w32(OS.MGR + 8, cur);
   var feed = function (m) { link.feed(Uint8Array.from(m)); };
   for (var lp = 0; lp < 48; lp++) w8(prog + OS.PAD_OFF + lp * OS.PAD_SIZE + OS.LEVEL, [100, 85, 70, 92, 60, 55, 100, 100, 100, 100, 78, 96][lp % 12]);
+  var reply = function (m) { m.push(O.chk(m, 2, m.length)); m.push(0xF7); setTimeout(function () { feed(m); }, 4); };
   link.setSender(function (msg) {
+    if (msg[2] === 0x10) { setTimeout(function () { feed([0xF0, 0x7D, 0x11, msg[3], 11, 0xF7]); }, 4); return; }   // PING: v11
+    if (msg[2] === 0x18) { reply([0xF0, 0x7D, 0x19, msg[3], 1, 7, 4, 1, 3, 1, 2, 1, 9, 1, 7, 1, 10, 1, 11, 1]); return; }   // CAPS
+    if (msg[2] === 0x40) {                                           // ACTION: livello di un pad (vista 10)
+      var arg = O.num7(msg, 6, 5), lv = arg & 0x7F, pd = (arg >> 7) & 0x3F, pr = arg >>> 13, ok = msg[4] === 10 && msg[5] === 0x10;
+      if (ok && pr === 0 && pd < 48 && lv <= 100) { w8(prog + OS.PAD_OFF + pd * OS.PAD_SIZE + OS.LEVEL, lv); sysviews(); }
+      reply([0xF0, 0x7D, 0x41, msg[3], !ok ? 1 : pr === 0 && pd < 48 && lv <= 100 ? 0 : 3]); return;
+    }
     if (msg[2] === 0x14) {                                           // POKE
       var pa = O.num7(msg, 4, 5);
       for (var pi = 0; pi < msg[9]; pi++) w8(pa + pi, msg[10 + 2 * pi] << 4 | msg[11 + 2 * pi]);
@@ -51,6 +59,19 @@
   var steps = [0x1111, 0x0101 << 4, 0x5555, 0x0808, 0, 0, 0x8001, 0, 0, 0, 0x2020, 0x1001];
   function grid(bar, step) { var d = [8, 0, bar, step, 0, 0, 0, 0]; steps.forEach(function (x) { d.push(x & 0xFF, x >> 8); }); return d.concat([0, 0, 0, 0, 0, 0, 0, 0]); }
   view(4, mute); view(3, scale); view(2, grid(1, 1)); view(9, [8, 0, 116, 0]);
+  // viste di sistema di MIDI Screen v11: program/banco/livelli (10), nomi dei pad (7), memoria (11)
+  function sysviews() {
+    var lv = [0, 0, 0]; for (var q = 0; q < 48; q++) lv.push(mem[prog + OS.PAD_OFF + q * OS.PAD_SIZE + OS.LEVEL] || 0);
+    view(10, lv);
+    var pn = [0, 0]; for (q = 0; q < 48; q++) for (var c = 0; c < 16; c++) pn.push(mem[prog + OS.PAD_OFF + q * OS.PAD_SIZE + c] || 0);
+    view(7, pn);
+    var used = p - head, total = 0x8FF20000 - head, nmb = [], cp = cur;
+    var me = [used & 255, used >> 8 & 255, used >> 16 & 255, used >>> 24, total & 255, total >> 8 & 255, total >> 16 & 255, total >>> 24, 12, 0];
+    var fr = 230000; me.push(fr & 255, fr >> 8 & 255, fr >> 16 & 255, 0);
+    for (c = 0; c < 16; c++) me.push(mem[cp + 4 + c] || 0);
+    view(11, me);
+  }
+  sysviews(); setInterval(sysviews, 2000);
   // a little life: MAIN screen with bar counter, then Trans-Chop slices playing, then the grid moving
   var t = 0;
   setInterval(function () {

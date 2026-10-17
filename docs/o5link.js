@@ -9,7 +9,8 @@
  *   link.setSender(function (bytes) { output.send(bytes); });
  *   link.caps().then(function (c) { ... c.views = [{view, ver}] });
  *
- * Events: display, wave (full 256 peaks per sample), trim, chop (all positions), play, view, stats.
+ * Events: display, wave (full 256 peaks per sample), trim, chop (all positions), play, view, stats,
+ *         mix / pads / mem (system views of MIDI Screen v11: sent only while subscribed, see subscribe()).
  */
 (function (root) {
   'use strict';
@@ -96,7 +97,7 @@
       this.emit('play', { sig: d[3], on: !!d[5], slice: d[6] - 1, start: num7(d, 7, 5), end: num7(d, 12, 5) });
     } else if (t === 0x30 && n >= 10) {
       ok = this._view(d);
-    } else if (t >= 0x11 && t <= 0x19 && (t & 1)) {
+    } else if ((t >= 0x11 && t <= 0x19 && (t & 1)) || t === 0x41) {
       ok = this._reply(d);
     } else { this.stats.unknown++; return; }
     if (ok) this.stats.ok++; else this.stats.bad++;
@@ -112,15 +113,46 @@
     var data = []; for (var k = 0; k < e.n; k++) data = data.concat(e.parts[k]);
     for (var kk in this.vparts) if (kk.split(':')[0] == vw) delete this.vparts[kk];
     var v = { view: vw, ver: ver, seq: sq, data: data };
-    this.views[vw] = v; this.emit('view', v);
+    this.views[vw] = v; this.emit('view', v); this._sysView(v);
     return true;
+  };
+  /* system views (MIDI Screen v11): the MPC sends its state, the page no longer reads OS memory */
+  var SYS = { PADS: 7, MIX: 10, MEM: 11 };
+  Link.prototype._sysView = function (v) {
+    var d = v.data, i;
+    if (v.view === SYS.MIX && d.length >= 51) {
+      this.sysAt = Date.now();
+      this.emit('mix', { program: d[0] | d[1] << 8, bank: d[2] & 3, levels: d.slice(3, 51) });
+    } else if (v.view === SYS.PADS && d.length >= 2 + 48 * 16) {
+      var names = []; for (i = 0; i < 48; i++) names.push(cstr(d, 2 + 16 * i, 16));
+      this.emit('pads', { program: d[0] | d[1] << 8, names: names });
+    } else if (v.view === SYS.MEM && d.length >= 30) {
+      this.emit('mem', { used: u32(d, 0), total: u32(d, 4), count: d[8] | d[9] << 8, frames: u32(d, 10), name: cstr(d, 14, 16) });
+    }
+  };
+  /* true while the MPC is sending the system views (MIX seen in the last 5 s) */
+  Link.prototype.hasSystemViews = function () { return !!this.sysAt && Date.now() - this.sysAt < 5000; };
+  /* the system views are sent only while a screen/app asks CAPS now and then: call once after connecting */
+  Link.prototype.subscribe = function (everyMs) {
+    var self = this;
+    if (this._sub) return;
+    var tick = function () {
+      if (!self.send) return;
+      if (self.version === undefined && !self._pinging) {           // once: MIDI Screen version (>= 11: system views)
+        self._pinging = true;
+        self.ping().then(function (v) { self.version = v.version; self.emit('version', v.version); }, function () {})
+                   .then(function () { self._pinging = false; });
+      }
+      self.caps().then(function (c) { self.capsInfo = c; self.emit('caps', c); }, function () {});
+    };
+    this._sub = setInterval(tick, everyMs || 4000); tick();
   };
 
   /* ---- requests (MPC answers one at a time: they are queued) ---- */
   Link.prototype._reply = function (d) {
     var p = this.pending[d[3]];
     if (!p || p.want !== d[2]) return true;                           // not ours / late: ignore
-    if (d[2] === 0x19 && chk(d, 2, d.length - 2) !== d[d.length - 2]) return false;
+    if ((d[2] === 0x19 || d[2] === 0x41) && chk(d, 2, d.length - 2) !== d[d.length - 2]) return false;
     clearTimeout(p.timer); delete this.pending[d[3]];
     p.resolve(Array.prototype.slice.call(d)); this._pump();
     return true;
@@ -141,7 +173,7 @@
     var go = function () {
       self.nextId = (self.nextId + 1) & 0x7F; var id = self.nextId;
       var msg = [0xF0, MFR, r.cmd, id].concat(r.body);
-      if (r.cmd === 0x18) msg.push(chk(msg, 2, msg.length));
+      if (r.cmd === 0x18 || r.cmd === 0x40) msg.push(chk(msg, 2, msg.length));
       msg.push(0xF7);
       self.pending[id] = { want: r.want, resolve: function (d) { self.queue.shift(); r.resolve(d); },
         timer: setTimeout(function () {
@@ -165,6 +197,10 @@
   };
   Link.prototype.event = function (type, code, data) {
     return this._request(0x16, enc7(type, 2).concat(enc7(code, 2), enc7(data >>> 0, 5)), 0x17).then(function () { return true; });
+  };
+  /* ACTION (PROTOCOL 4.3): result 0 ok, 1 unknown view/action, 2 busy, 3 refused */
+  Link.prototype.action = function (view, action, arg) {
+    return this._request(0x40, [view, action].concat(enc7(arg >>> 0, 5)), 0x41).then(function (d) { return d[4]; });
   };
   Link.prototype.caps = function () {
     return this._request(0x18, [], 0x19).then(function (d) {
@@ -211,10 +247,17 @@
     })(i);
     return chain.then(function () { return out; });
   };
-  /* sets a pad level only if the MPC is still on that program (otherwise rejects: the page must re-read) */
+  /* sets a pad level only if the MPC is still on that program (otherwise rejects: the page must re-read).
+     MIDI Screen v11: typed action checked by the MPC itself; older MIDI Screen: PEEK of the program + POKE of the byte */
   Link.prototype.setLevel = function (program, pad, value) {
     var self = this, v = Math.max(0, Math.min(100, Math.round(value)));
     if (!(pad >= 0 && pad < 48)) return Promise.reject(new Error('bad pad'));
+    if (this.hasSystemViews())
+      return this.action(SYS.MIX, 0x10, v | pad << 7 | program << 13).then(function (r) {
+        if (r === 3) throw new Error('program changed on the MPC');
+        if (r !== 0) throw new Error('the MPC refused the level (' + r + ')');
+        return true;
+      });
     return this.peek(OS.PROG_IDX, 2).then(function (b) {
       if ((b[0] | b[1] << 8) !== program) throw new Error('program changed on the MPC');
       return self.poke(OS.PROG_BASE + program * OS.PROG_STRIDE + OS.PAD_OFF + pad * OS.PAD_SIZE + OS.LEVEL, [v]);
@@ -268,6 +311,6 @@
     });
   };
 
-  var api = { Link: Link, pack7: pack7, unpack7: unpack7, enc7: enc7, num7: num7, chk: chk, OS: OS };
+  var api = { Link: Link, pack7: pack7, unpack7: unpack7, enc7: enc7, num7: num7, chk: chk, OS: OS, SYS: SYS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.O5Link = api;
 })(this);

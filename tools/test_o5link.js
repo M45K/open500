@@ -117,3 +117,32 @@ console.log('ok: %d packets decoded, same result per message and as a byte strea
   w8(OS.PROG_IDX, 5); await assert.rejects(L.setLevel(2, 15, 10), /program changed/); assert.strictEqual(pokes.length, 2);
   console.log('ok: mixer levels read, written only to pad+0x8F, clamped 0..100, refused if the program changed');
 })().catch(e => { console.error(e); process.exit(1); });
+
+// 6) MIDI Screen v11 system views (real bytes from the emulator, fixtures/midiscreen_v11.json: program 3, bank C, pad p
+//    named 'PADpp LONGNAME' or, every 5th, only on layer 1 'L1 pp'; level (2p) % 101, then pad 6 (A06) set to 77 by an action)
+(async () => {
+  const P11 = require(path.join(__dirname, 'fixtures', 'midiscreen_v11.json'));
+  const L = new O5.Link(), mix = [], pads = [], mem = [];
+  L.on('mix', d => mix.push(d)); L.on('pads', d => pads.push(d)); L.on('mem', d => mem.push(d));
+  P11.forEach(p => L.feed(Uint8Array.from(p)));
+  assert.strictEqual(L.stats.bad, 0);
+  const lv = Array.from({ length: 48 }, (_, p) => (2 * p) % 101);
+  assert.ok(mix.some(m => m.program === 3 && m.bank === 2 && JSON.stringify(m.levels) === JSON.stringify(lv)), 'MIX levels');
+  const last = mix[mix.length - 1]; assert.strictEqual(last.levels[5], 77, 'MIX after the level action');
+  const nm = Array.from({ length: 48 }, (_, p) => p % 5 ? ('PAD' + String(p).padStart(2, '0') + ' LONGNAME') : ('L1 ' + String(p).padStart(2, '0')));
+  assert.ok(pads.some(d => d.program === 3 && JSON.stringify(d.names) === JSON.stringify(nm)), JSON.stringify(pads[0] && pads[0].names.slice(0, 6)));
+  assert.ok(mem.length && mem[0].count >= 3 && mem[0].used > 0 && mem[0].used < mem[0].total, JSON.stringify(mem[0]));
+  // setLevel with system views alive = ACTION 0x40 (checked by the MPC), not POKE
+  const sent = []; L.setSender(msg => {
+    sent.push(msg); const r = [0xF0, 0x7D, 0x41, msg[3], 0]; r.push(O5.chk(r, 2, r.length)); r.push(0xF7);
+    setTimeout(() => L.feed(Uint8Array.from(r)), 1);
+  });
+  L.sysAt = Date.now(); assert.ok(L.hasSystemViews());
+  assert.strictEqual(await L.setLevel(3, 5, 64.6), true);
+  const m = sent[0]; assert.deepStrictEqual([m[2], m[4], m[5]], [0x40, 10, 0x10]);
+  const arg = O5.num7(m, 6, 5); assert.deepStrictEqual([arg & 0x7F, (arg >> 7) & 0x3F, arg >>> 13], [65, 5, 3]);
+  assert.strictEqual(m[11], O5.chk(m, 2, 11), 'action chk');
+  L.setSender(msg => { const r = [0xF0, 0x7D, 0x41, msg[3], 3]; r.push(O5.chk(r, 2, r.length)); r.push(0xF7); setTimeout(() => L.feed(Uint8Array.from(r)), 1); });
+  await assert.rejects(L.setLevel(2, 5, 10), /program changed/);
+  console.log('ok: MIDI Screen v11 system views (MIX %d, PADS %d, MEM %d) and the level ACTION (no POKE)', mix.length, pads.length, mem.length);
+})().catch(e => { console.error(e); process.exit(1); });

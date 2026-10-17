@@ -162,7 +162,7 @@ var $ = function (id) { return document.getElementById(id); };
 var cv = $('wv'), g = cv.getContext('2d'), lcd = $('lcd'), info = $('info'), st = $('st');
 var link = new O5Link.Link();
 var S = { peaks: new Array(256).fill(0), have: new Array(8).fill(false), trim: null, chops: [], play: null, sig: -1 };
-var M = { program: -1, bank: -1, showBank: -1, pads: {}, samples: null, lcd: {} };   // stato letto dall'MPC
+var M = { program: -1, bank: -1, showBank: -1, pads: {}, samples: null, lcd: {}, lv48: null, mem: null };   // stato dall'MPC
 function ch(c) { return c === 0x7F ? '█' : c < 8 ? '□' : String.fromCharCode(c); }
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
 function newsig(s) { if (s !== S.sig) { S.sig = s; S.trim = null; S.chops = []; S.play = null; R.samplesAt = 0; } }
@@ -232,7 +232,7 @@ function bar() {
   $('pBar').textContent = (M.lcd.bar || (gr ? gr.data[2] : '--')) + (nb ? '/' + nb : '');
   $('pPgm').textContent = M.program >= 0 ? ('0' + (M.program + 1)).slice(-2) : '--';
   $('pBank').textContent = M.bank >= 0 ? 'ABCD'[M.bank] : '-';
-  var cur = M.samples && M.samples.list.filter(function (x) { return x.addr === M.samples.current; })[0];
+  var cur = M.samples ? M.samples.list.filter(function (x) { return x.addr === M.samples.current; })[0] : M.mem && M.mem.name ? M.mem : null;
   $('pSmp').textContent = cur ? cur.name + '  ' + secs(cur.frames) : S.trim ? secs(S.trim.len) : '--';
   $('smpName').textContent = cur ? cur.name : '';
 }
@@ -267,7 +267,7 @@ function drawPads() {
 }
 $('banks').onclick = function (e) {                                // solo vista: il banco dell'MPC non cambia
   var k = e.target.getAttribute('data-b'); if (k === null) return;
-  M.showBank = +k === M.bank ? -1 : +k; MX.lv = []; drawPads(); drawMixer(); R.until = 0;
+  M.showBank = +k === M.bank ? -1 : +k; MX.lv = M.lv48 ? M.lv48.slice(viewBank() * 12, viewBank() * 12 + 12) : []; drawPads(); drawMixer(); R.until = 0;
 };
 
 // ---------------- mixer: livello (0..100) dei 12 pad del banco mostrato; si scrive SOLO quel byte ----------------
@@ -317,8 +317,21 @@ $('faders').addEventListener('pointermove', function (ev) {
 
 // ---------------- memoria sample ----------------
 function drawSamples() {
-  var s = M.samples; if (!s) return;
-  var mb = function (x) { return (x / 1048576).toFixed(1) + ' MB'; };
+  var s = M.samples, mb = function (x) { return (x / 1048576).toFixed(1) + ' MB'; };
+  if (!s && M.mem) {                                              // MIDI Screen v11: memory view (no list: on request)
+    var g = M.mem;
+    $('memTxt').textContent = g.count + ' samples, ' + mb(g.total - g.used) + ' free of ' + mb(g.total);
+    $('memBar').style.width = $('memBar2').style.width = Math.min(100, g.used / g.total * 100).toFixed(1) + '%';
+    $('memTxt2').textContent = mb(g.total - g.used) + ' free';
+    $('slist').innerHTML = (g.name ? '<div class="cur"><b>' + esc(g.name) + '</b><span>' + secs(g.frames) + '</span><span>current</span></div>' : '') +
+      '<div><button id="slistGo">List all samples</button></div>';
+    $('slistGo').onclick = function () {
+      this.disabled = true; this.textContent = 'reading…';
+      link.readSamples().then(function (x) { M.samples = x; drawSamples(); bar(); }, function (e) { $('slistGo').textContent = 'no answer: ' + e.message; });
+    };
+    return;
+  }
+  if (!s) return;
   $('memTxt').textContent = s.list.length + ' samples, ' + mb(s.total - s.used) + ' free of ' + mb(s.total);
   $('memBar').style.width = $('memBar2').style.width = Math.min(100, s.used / s.total * 100).toFixed(1) + '%';
   $('memTxt2').textContent = mb(s.total - s.used) + ' free';
@@ -330,6 +343,9 @@ function drawSamples() {
 // ---------------- letture periodiche (PEEK: servono MIDI IN o USB) ----------------
 var R = { busy: false, until: 0, namesAt: 0, samplesAt: 0, levelsAt: 0 };
 function poll() {
+  // MIDI Screen v11+ manda lui program, livelli, nomi e memoria (viste di sistema): niente letture. Le letture PEEK
+  // restano solo per un MIDI Screen vecchio (versione < 11, saputa con PING).
+  if (link.version === undefined || link.version >= 11) return;
   if (!link.send || R.busy || Date.now() < R.until || Date.now() - CN.lastPkt > 3000) return;   // MPC muto: non interroghiamo
   R.busy = true;
   var now = Date.now();
@@ -364,6 +380,16 @@ function poll() {
 setInterval(poll, 1500);
 
 // ---------------- eventi dal protocollo ----------------
+// MIDI Screen v11: viste di sistema
+link.on('mix', function (d) {
+  if (d.program !== M.program) M.pads = {};
+  M.program = d.program; M.bank = d.bank; M.lv48 = d.levels;
+  if (MX.drag < 0 && !Object.keys(MX.want).length) { var b = viewBank(); MX.lv = d.levels.slice(b * 12, b * 12 + 12); MX.key = M.program + ':' + b; }
+  $('padsSrc').textContent = 'program ' + (M.program + 1) + (M.showBank >= 0 && M.showBank !== M.bank ? ' (viewing bank ' + 'ABCD'[M.showBank] + ')' : '');
+  bar(); drawPads(); drawMixer();
+});
+link.on('pads', function (d) { if (d.program !== M.program) return; d.names.forEach(function (n, p) { M.pads[p] = n; }); drawPads(); drawMixer(); });
+link.on('mem', function (d) { M.mem = d; drawSamples(); bar(); fkeys(); });
 link.on('wave', function (w) { if (w.sig !== S.sig) act('sample'); newsig(w.sig); S.peaks = w.peaks; S.have = w.have; draw(); });
 link.on('trim', function (t) {
   if (!S.trim || t.start !== S.trim.start || t.end !== S.trim.end || t.sig !== S.sig) act('sample');
@@ -386,7 +412,7 @@ var T = { pin: 'auto', auto: 'sample' };
 function act(tab) { T.auto = tab; fkeys(); }
 function fkeys() {
   var cur = T.pin === 'auto' ? T.auto : T.pin, V = link.views;
-  var has = { sample: S.have.some(Boolean) || !!S.trim, grid: !!V[2], scale: !!V[3], mute: !!V[4], memory: !!M.samples };
+  var has = { sample: S.have.some(Boolean) || !!S.trim, grid: !!V[2], scale: !!V[3], mute: !!V[4], memory: !!M.samples || !!M.mem };
   [].forEach.call(document.querySelectorAll('#fkeys div'), function (d) {
     var k = d.getAttribute('data-k');
     d.className = (k === T.pin ? 'sel' : '') + (has[k] ? ' live' : '');
@@ -459,13 +485,13 @@ function connect() {
     window.O5Native.start(function (bytes) { CN.raw += bytes.length; link.feedStream(bytes); },
                           function (p) { CN.ins = p.sources || []; CN.outs = p.destinations || []; CN.err = p.error || ''; conn(); });
     link.setSender(function (m) { window.O5Native.send(m); });
-    conn(); return;
+    link.subscribe(); conn(); return;
   }
   CN.mode = 'Web MIDI';
   link.on('ports', function (p) { CN.ins = p.inputs; CN.outs = p.outputs; conn(); });
   link.on('raw', function (n) { CN.raw += n; });
   link.connectWebMidi().catch(function (err) { CN.ins = []; CN.err = String(err.message || err); conn(); });
-  conn();
+  link.subscribe(); conn();
 }
 $('go').onclick = connect;
 if (/[?&]demo\b/.test(location.search)) { var sd = document.createElement('script'); sd.src = 'screen-demo.js'; document.body.appendChild(sd); }
