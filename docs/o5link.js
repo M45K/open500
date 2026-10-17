@@ -249,7 +249,7 @@
     return navigator.requestMIDIAccess({ sysex: true }).then(function (access) {
       function hook() {
         var names = [];
-        access.inputs.forEach(function (i) { i.onmidimessage = function (e) { self.feed(e.data); }; names.push(i.name); });
+        access.inputs.forEach(function (i) { i.onmidimessage = function (e) { self.emit('raw', e.data.length); self.feed(e.data); }; names.push(i.name); });
         var outs = []; access.outputs.forEach(function (o) { outs.push(o); });
         self.setSender(outs.length ? function (m) { outs.forEach(function (o) { o.send(m); }); } : null);
         self.emit('ports', { inputs: names, outputs: outs.map(function (o) { return o.name; }) });

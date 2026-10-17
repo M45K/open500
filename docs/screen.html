@@ -19,7 +19,7 @@
   .pill.bpm b { color: var(--red); font-size: 26px; } .pill.wide { flex: 1; min-width: 0; } .pill.wide b { font-size: 16px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   #logo { background: var(--red); color: #fff; font: 800 15px -apple-system, sans-serif; letter-spacing: 1px; padding: 0 14px; display: flex; align-items: center; }
   button#go { background: #1b1c20; color: var(--txt); border: 0; font: 600 14px -apple-system, sans-serif; padding: 0 16px; }
-  button#go.on { color: #4cd964; }
+  button#go.on { color: #4cd964; } button#go.warn { color: var(--yel); } button#go.bad { color: var(--red); }
   /* corpo: pad | pannello */
   #dash { flex: 1; display: grid; gap: 10px; padding: 10px; grid-template-columns: minmax(0, 1fr); min-height: 0; }
   #fkeys { position: sticky; bottom: 0; z-index: 2; }
@@ -372,9 +372,6 @@ link.on('play', function (p) {
   newsig(p.sig); if (p.on) act('sample'); S.play = p.on ? { slice: p.slice, start: p.start, end: p.end, t0: performance.now() } : null;
   if (S.play) anim(); else draw();
 });
-link.on('stats', function (x) {
-  st.textContent = 'packets ' + x.ok + '  bad ' + x.bad + '  sample #' + S.sig + '  ' + new Date().toLocaleTimeString();
-});
 var VTAB = { 2: 'grid', 3: 'scale', 4: 'mute' }, lastView = {};
 link.on('view', function (v) {
   if (v.view === 4) setTimeout(drawMixer, 0);
@@ -440,15 +437,32 @@ function drawviews() {
   $('vMute').innerHTML = html || none('PAD MUTE', 'load Pad Mute (SHIFT + TRACK MUTE)');
 }
 draw(); drawPads(); drawviews(); fkeys(); drawMixer();
+// ---------------- collegamento: lo stato mostrato e' quello VERO (porte viste, byte e pacchetti ricevuti) ----------------
+var CN = { mode: '', ins: null, outs: null, raw: 0, lastPkt: 0, err: '' };
+function conn() {
+  var b = $('go'), live = Date.now() - CN.lastPkt < 3000, ins = CN.ins || [];
+  if (!CN.mode) { b.className = ''; b.textContent = 'Connect'; }
+  else if (live) { b.className = 'on'; b.textContent = '● ' + (ins[0] || 'MIDI') + ' · live'; }
+  else if (ins.length) { b.className = 'warn'; b.textContent = '○ ' + ins[0] + ' · no data'; }
+  else { b.className = 'bad'; b.textContent = CN.ins === null ? '… connecting' : '○ No MIDI device'; }
+  if (CN.mode) st.textContent = (CN.err ? 'ERROR ' + CN.err + ' · ' : '') + CN.mode + ' · in: ' + (ins.join(', ') || 'none') + ' · out: ' + ((CN.outs || []).join(', ') || 'none') +
+    ' · bytes ' + CN.raw + ' · packets ' + link.stats.ok + ' ok / ' + link.stats.bad + ' bad · ' + new Date().toLocaleTimeString();
+}
+setInterval(conn, 1000);
+link.on('stats', function () { CN.lastPkt = Date.now(); });
 function connect() {
-  $('go').className = 'on'; $('go').textContent = '● Connected';
   if (window.O5Native) {                                         // dentro la companion app: MIDI nativo (CoreMIDI)
-    window.O5Native.start(function (bytes) { link.feedStream(bytes); }, function (info) { st.textContent = info; });
+    CN.mode = 'CoreMIDI';
+    window.O5Native.start(function (bytes) { CN.raw += bytes.length; link.feedStream(bytes); },
+                          function (p) { CN.ins = p.sources || []; CN.outs = p.destinations || []; CN.err = p.error || ''; conn(); });
     link.setSender(function (m) { window.O5Native.send(m); });
-    return;
+    conn(); return;
   }
-  link.on('ports', function (p) { st.textContent = p.inputs.length ? 'listening on: ' + p.inputs.join(', ') : 'no MIDI input found'; });
-  link.connectWebMidi().catch(function (err) { st.textContent = String(err.message || err); });
+  CN.mode = 'Web MIDI';
+  link.on('ports', function (p) { CN.ins = p.inputs; CN.outs = p.outputs; conn(); });
+  link.on('raw', function (n) { CN.raw += n; });
+  link.connectWebMidi().catch(function (err) { CN.ins = []; CN.err = String(err.message || err); conn(); });
+  conn();
 }
 $('go').onclick = connect;
 if (/[?&]demo\b/.test(location.search)) { var sd = document.createElement('script'); sd.src = 'screen-demo.js'; document.body.appendChild(sd); }
