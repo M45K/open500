@@ -284,6 +284,41 @@
     });
   };
 
+  /* add-on map (diagnostics, on request): the HUB tables at B+0x100 (B = MGR[1]) and the HUB v3 black box at B+0x1000.
+     Read only. Same layout as sdk/hub.py (Lay). */
+  Link.prototype.readAddons = function () {
+    var self = this, out = { B: 0, hub3: false, slots: [], bb: null };
+    var rd = function (addr, n) {                                     // PEEK reads at most 32 bytes
+      var parts = [], chain = Promise.resolve();
+      for (var o = 0; o < n; o += 32) (function (o) {
+        chain = chain.then(function () { return self.peek(addr + o, Math.min(32, n - o)); }).then(function (b) { parts = parts.concat(b); });
+      })(o);
+      return chain.then(function () { return parts; });
+    };
+    var T = {};
+    return this.peek(OS.MGR + 4, 4).then(function (b) {
+      out.B = u32(b, 0); var S = out.B + 0x100;
+      return rd(S + 0x44, 64).then(function (x) { T.inst = x; return rd(S + 0x144, 64); })
+        .then(function (x) { T.base = x; return rd(S + 0x184, 64); })
+        .then(function (x) { T.len = x; return rd(S + 0x1C4, 128); })
+        .then(function (x) { T.name = x; return rd(S + 0x384, 64); })
+        .then(function (x) { T.scr = x; return rd(out.B + 0x1000, 0x20); })
+        .then(function (bb) {
+          out.hub3 = u32(bb, 0) === 0x42423554;                      // 'O5BB': only the HUB v3 writes it
+          if (out.hub3) out.bb = { gen: u32(bb, 8), errors: u32(bb, 12), crash: cstr(bb, 0x10, 8), memErr: cstr(bb, 0x18, 8) };
+          for (var k = 0; k < 16; k++) {
+            var st = u32(T.inst, 4 * k); if (!st) continue;
+            var base = u32(T.base, 4 * k), len = u32(T.len, 4 * k);
+            out.slots.push({ slot: k, state: st === 1 ? 'ok' : st === 2 ? 'STOPPED (code changed)' : 'state ' + st,
+                             name: cstr(T.name, 8 * k, 8), base: base, len: len, scratch: out.hub3 ? u32(T.scr, 4 * k) : base + 0x7000,
+                             page: ((base & 0x1FFFFFFF) - ((out.B + 0x18000) & 0x1FFFFFFF)) >> 12 });
+          }
+          out.slots.sort(function (a, b) { return a.page - b.page; });
+          return out;
+        });
+    });
+  };
+
   /* ---- Web MIDI transport (Chrome desktop/Android) ---- */
   Link.prototype.connectWebMidi = function () {
     var self = this;
