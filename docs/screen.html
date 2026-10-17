@@ -467,6 +467,8 @@ function drawviews() {
 draw(); drawPads(); drawviews(); fkeys(); drawMixer();
 // ---------------- collegamento: lo stato mostrato e' quello VERO (porte viste, byte e pacchetti ricevuti) ----------------
 var CN = { mode: '', ins: null, outs: null, raw: 0, lastPkt: 0, err: '' };
+var BUILD = 'web';                                   // the app's sync script writes its build date and commit here
+function who() { return 'page ' + BUILD + (link.version !== undefined ? ' · MIDI Screen v' + link.version : ''); }
 function conn() {
   var b = $('go'), live = Date.now() - CN.lastPkt < 3000, ins = CN.ins || [];
   if (!CN.mode) { b.className = ''; b.textContent = 'Connect'; }
@@ -474,7 +476,8 @@ function conn() {
   else if (ins.length) { b.className = 'warn'; b.textContent = '○ ' + ins[0] + ' · no data'; }
   else { b.className = 'bad'; b.textContent = CN.ins === null ? '… allow MIDI in Chrome' : '○ No MIDI device'; }
   if (CN.mode === 'Web MIDI' && CN.ins === null) { st.textContent = 'waiting for MIDI permission: click "Allow" in the Chrome popup (or the icon at the right of the address bar → Allow MIDI)'; return; }
-  if (CN.mode) st.textContent = (CN.err ? 'ERROR ' + CN.err + ' · ' : '') + CN.mode + ' · in: ' + (ins.join(', ') || 'none') + ' · out: ' + ((CN.outs || []).join(', ') || 'none') +
+  if (!CN.mode) st.textContent = 'press "Connect" (Chrome: allow SysEx messages) · ' + who();
+  if (CN.mode) st.textContent = (CN.err ? 'ERROR ' + CN.err + ' · ' : '') + who() + ' · ' + CN.mode + ' · in: ' + (ins.join(', ') || 'none') + ' · out: ' + ((CN.outs || []).join(', ') || 'none') +
     ' · bytes ' + CN.raw + ' · packets ' + link.stats.ok + ' ok / ' + link.stats.bad + ' bad · ' + new Date().toLocaleTimeString();
 }
 setInterval(conn, 1000);
