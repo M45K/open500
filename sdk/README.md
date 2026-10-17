@@ -88,7 +88,9 @@ Addresses are for OS 1.31 only. More in the official add-ons' source headers.
 - Only touch memory the OS will not move under you; when you move OS data (sequence arena, sample list) do it with
   interrupts masked (`stc sr` / `or #0xF0` / `ldc sr`, see Seq Tools) and restore them.
 - Handlers must preserve `r8-r15` (the testkit checks it). Fire code may use `r0-r14`.
-- Code + objects ≤ 28 KB; private scratch ≤ 4 KB.
+- Code + objects ≤ 28 KB; private scratch ≤ 4 KB. The HUB packs add-ons in 4 KB pages: memory between the end of your
+  code and your scratch belongs to OTHER add-ons, unless you reserve it (`pg.reserve = SLOT_CODE_MAX`, as Master FX
+  and Trans-Chop do for their buffers).
 - Test in the emulator first; then on hardware with a backup of your work. Flashing the original OS always restores
   the machine (the bootloader is never touched).
 

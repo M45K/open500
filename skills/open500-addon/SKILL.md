@@ -41,7 +41,8 @@ The SDK is in `sdk/` of the Open500 repository; read `sdk/README.md` and `sdk/ex
 - Handlers preserve r8-r15. Fire may use r0-r14.
 - New add-ons publish a view (`view.py`) so the remote screen can show them; views 10-23 are for new add-ons, tell
   the user to request a number in an issue before sharing.
-- Do not touch the HUB, the loader or other add-ons' memory.
+- Do not touch the HUB, the loader or other add-ons' memory. Buffers between the code and the scratch need
+  `pg.reserve = SLOT_CODE_MAX`, otherwise the HUB puts another add-on there.
 
 ## SH-3 and assembler gotchas (check these first when something fails)
 - `pool troppo lontana` → literal pool more than 1 KB away: add `m.pool_jump()` after a block of code.
