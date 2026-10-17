@@ -328,16 +328,16 @@ function drawSamples() {
 }
 
 // ---------------- letture periodiche (PEEK: servono MIDI IN o USB) ----------------
-var R = { busy: false, until: 0, namesAt: 0, samplesAt: 0 };
+var R = { busy: false, until: 0, namesAt: 0, samplesAt: 0, levelsAt: 0 };
 function poll() {
-  if (!link.send || R.busy || Date.now() < R.until) return;
+  if (!link.send || R.busy || Date.now() < R.until || Date.now() - CN.lastPkt > 3000) return;   // MPC muto: non interroghiamo
   R.busy = true;
   var now = Date.now();
   link.readProgram([]).then(function (p) {
     var changed = p.program !== M.program;
     if (changed) { M.pads = {}; MX.lv = []; }
     M.program = p.program; M.bank = p.bank;
-    var banks = changed ? [p.bank, 0, 1, 2, 3].filter(function (x, i, a) { return a.indexOf(x) === i; }) : now - R.namesAt > 6000 ? [viewBank()] : [];
+    var banks = changed ? [p.bank, 0, 1, 2, 3].filter(function (x, i, a) { return a.indexOf(x) === i; }) : now - R.namesAt > 15000 ? [viewBank()] : [];
     if (changed || banks.length) { bar(); drawPads(); }
     return banks.reduce(function (ch_, bk) {
       return ch_.then(function () { return link.readProgram([bk]); }).then(function (q) { for (var k in q.pads) M.pads[k] = q.pads[k]; drawPads(); drawMixer(); });
@@ -345,6 +345,8 @@ function poll() {
   }).then(function () {
     var b = viewBank(), key = M.program + ':' + b;
     if (MX.drag >= 0 || Object.keys(MX.want).length) return;            // mentre muovi un fader non rileggiamo
+    if (key === MX.key && now - R.levelsAt < 3000) return;               // livelli ogni 3 s (subito se cambia program/banco)
+    R.levelsAt = now;
     return link.readLevels(M.program, b).then(function (lv) {
       if (MX.drag >= 0 || Object.keys(MX.want).length || viewBank() !== b) return;
       MX.lv = lv; MX.key = key; drawMixer();

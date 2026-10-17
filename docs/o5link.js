@@ -247,12 +247,22 @@
     if (typeof navigator === 'undefined' || !navigator.requestMIDIAccess)
       return Promise.reject(new Error('this browser has no Web MIDI (no iPhone/iPad browser has it)'));
     return navigator.requestMIDIAccess({ sysex: true }).then(function (access) {
+      // requests go ONLY to the port the MPC talks on (same name as an input that delivered valid Open500 messages, or
+      // a port named MPC500), never to every output: other apps/devices (Protokol, synths) must not get our traffic
+      var mpc = {};
       function hook() {
         var names = [];
-        access.inputs.forEach(function (i) { i.onmidimessage = function (e) { self.emit('raw', e.data.length); self.feed(e.data); }; names.push(i.name); });
-        var outs = []; access.outputs.forEach(function (o) { outs.push(o); });
+        access.inputs.forEach(function (i) {
+          i.onmidimessage = function (e) {
+            var ok = self.stats.ok; self.emit('raw', e.data.length); self.feed(e.data);
+            if (self.stats.ok > ok && !mpc[i.name]) { mpc[i.name] = true; hook(); }
+          };
+          names.push(i.name);
+        });
+        var outs = []; access.outputs.forEach(function (o) { if (mpc[o.name] || /MPC500/i.test(o.name)) outs.push(o); });
         self.setSender(outs.length ? function (m) { outs.forEach(function (o) { o.send(m); }); } : null);
-        self.emit('ports', { inputs: names, outputs: outs.map(function (o) { return o.name; }) });
+        var all = []; access.outputs.forEach(function (o) { all.push(o.name + (outs.indexOf(o) >= 0 ? ' (MPC)' : '')); });
+        self.emit('ports', { inputs: names, outputs: all });
       }
       access.onstatechange = hook; hook(); return access;
     });
