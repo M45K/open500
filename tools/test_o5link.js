@@ -88,8 +88,13 @@ console.log('ok: %d packets decoded, same result per message and as a byte strea
     const size = (0x100 + 2 * fr + 3) & ~3; w32(p, size); ws(p + 4, nm); w32(p + 0x18, fr); p += size;
   }
   w32(OS.MGR, head); w32(OS.MGR + 4, 0x8FF20000); w32(OS.MGR + 8, head + ((0x100 + 1800 + 3) & ~3));
-  const L = new O5.Link(); let peeks = 0;
+  const L = new O5.Link(); let peeks = 0, pokes = [];
   L.setSender(msg => {
+    if (msg[2] === 0x14) {                                               // POKE: addr, n, 2n nibble
+      const a = O5.num7(msg, 4, 5), n = msg[9]; pokes.push(a);
+      for (let i = 0; i < n; i++) w8(a + i, msg[10 + 2 * i] << 4 | msg[11 + 2 * i]);
+      setTimeout(() => L.feed(Uint8Array.from([0xF0, 0x7D, 0x15, msg[3], 0xF7])), 1); return;
+    }
     if (msg[2] !== 0x12) return;
     const a = O5.num7(msg, 4, 5), n = msg[9]; assert.ok(n <= 32, 'PEEK n <= 32'); peeks++;
     const out = [0xF0, 0x7D, 0x13, msg[3], n];
@@ -104,4 +109,11 @@ console.log('ok: %d packets decoded, same result per message and as a byte strea
   assert.deepStrictEqual(S.list.map(s => [s.name, s.frames]), [['HUB', 900], ['KICK 909', 22050], ['LOOP 92', 400000]]);
   assert.strictEqual(S.current, S.list[1].addr); assert.strictEqual(S.used, p - head); assert.strictEqual(S.total, 0x8FF20000 - head);
   console.log('ok: program/bank/pad names and sample memory via PEEK (%d requests, all <= 32 bytes)', peeks);
+  for (let i = 0; i < 12; i++) w8(pad(12 + i) + OS.LEVEL, 100 - 5 * i);
+  assert.deepStrictEqual(await L.readLevels(2, 1), Array.from({ length: 12 }, (_, i) => 100 - 5 * i));
+  await L.setLevel(2, 15, 64.4); assert.strictEqual(mem.get(pad(15) + OS.LEVEL), 64);
+  await L.setLevel(2, 15, 180); assert.strictEqual(mem.get(pad(15) + OS.LEVEL), 100);
+  assert.deepStrictEqual(pokes, [pad(15) + OS.LEVEL, pad(15) + OS.LEVEL], 'POKE only the level byte');
+  w8(OS.PROG_IDX, 5); await assert.rejects(L.setLevel(2, 15, 10), /program changed/); assert.strictEqual(pokes.length, 2);
+  console.log('ok: mixer levels read, written only to pad+0x8F, clamped 0..100, refused if the program changed');
 })().catch(e => { console.error(e); process.exit(1); });

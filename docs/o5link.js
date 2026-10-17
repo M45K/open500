@@ -201,6 +201,25 @@
       return chain;
     }).then(function () { return out; });
   };
+  /* mixer: level (0..100) of the 12 pads of a bank in the current program; the only thing we WRITE is that byte */
+  OS.LEVEL = 0x8F;
+  Link.prototype.readLevels = function (program, bank) {
+    var self = this, prog = OS.PROG_BASE + program * OS.PROG_STRIDE, out = [], chain = Promise.resolve();
+    for (var i = 0; i < 12; i++) (function (i) {
+      chain = chain.then(function () { return self.peek(prog + OS.PAD_OFF + (bank * 12 + i) * OS.PAD_SIZE + OS.LEVEL, 1); })
+                   .then(function (b) { out[i] = b[0]; });
+    })(i);
+    return chain.then(function () { return out; });
+  };
+  /* sets a pad level only if the MPC is still on that program (otherwise rejects: the page must re-read) */
+  Link.prototype.setLevel = function (program, pad, value) {
+    var self = this, v = Math.max(0, Math.min(100, Math.round(value)));
+    if (!(pad >= 0 && pad < 48)) return Promise.reject(new Error('bad pad'));
+    return this.peek(OS.PROG_IDX, 2).then(function (b) {
+      if ((b[0] | b[1] << 8) !== program) throw new Error('program changed on the MPC');
+      return self.poke(OS.PROG_BASE + program * OS.PROG_STRIDE + OS.PAD_OFF + pad * OS.PAD_SIZE + OS.LEVEL, [v]);
+    });
+  };
   /* sample memory: list of blocks {addr, name, frames, size}, current sample, bytes used / total */
   Link.prototype.readSamples = function () {
     var self = this, out = { list: [], current: 0, used: 0, total: 0 };

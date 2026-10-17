@@ -17,7 +17,13 @@
   });
   w32(OS.MGR, head); w32(OS.MGR + 4, 0x8FF20000); w32(OS.MGR + 8, cur);
   var feed = function (m) { link.feed(Uint8Array.from(m)); };
+  for (var lp = 0; lp < 48; lp++) w8(prog + OS.PAD_OFF + lp * OS.PAD_SIZE + OS.LEVEL, [100, 85, 70, 92, 60, 55, 100, 100, 100, 100, 78, 96][lp % 12]);
   link.setSender(function (msg) {
+    if (msg[2] === 0x14) {                                           // POKE
+      var pa = O.num7(msg, 4, 5);
+      for (var pi = 0; pi < msg[9]; pi++) w8(pa + pi, msg[10 + 2 * pi] << 4 | msg[11 + 2 * pi]);
+      setTimeout(function () { feed([0xF0, 0x7D, 0x15, msg[3], 0xF7]); }, 4); return;
+    }
     if (msg[2] !== 0x12) return;
     var a = O.num7(msg, 4, 5), n = msg[9], out = [0xF0, 0x7D, 0x13, msg[3], n];
     for (var i = 0; i < n; i++) { var b = mem[a + i] || 0; out.push(b >> 4, b & 15); }
@@ -40,7 +46,7 @@
   var cuts = []; for (var q = 0; q < 8; q++) cuts.push(2000 + Math.round(q * (LEN - 5000) / 8));
   var cm = [0xF0, 0x7D, 0x04, sig, 1, 0, 8, 8]; cuts.forEach(function (x) { cm = cm.concat(e7(x, 4)); }); cm.push(0xF7); feed(cm);
   // views: Pad Mute (bank A: 3 muted, 7 solo), Scale Pads (D dorian on bank B), Grid (bank A), Seq Tools
-  var mute = [0]; for (var i = 0; i < 48; i++) mute.push(i === 2 ? 1 : i === 6 ? 2 : i < 12 && i !== 6 ? 4 : 0);
+  var mute = [0]; for (var i = 0; i < 48; i++) mute.push(i === 2 ? 1 : 0);
   var scale = [2, 2, 1, 0, 0]; [0, 2, 3, 5, 7, 9, 10, 12, 14, 15, 17, 19].forEach(function (x) { scale.push((x + 2) & 0xFF); });
   var steps = [0x1111, 0x0101 << 4, 0x5555, 0x0808, 0, 0, 0x8001, 0, 0, 0, 0x2020, 0x1001];
   function grid(bar, step) { var d = [8, 0, bar, step, 0, 0, 0, 0]; steps.forEach(function (x) { d.push(x & 0xFF, x >> 8); }); return d.concat([0, 0, 0, 0, 0, 0, 0, 0]); }

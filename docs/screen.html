@@ -86,6 +86,22 @@
   #slist { margin-top: 10px; font-size: 13px; columns: 2 260px; }
   #slist div { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; padding: 4px 6px; border-radius: 5px; color: #b5b7bd; break-inside: avoid; }
   #slist div.cur { background: #33100e; color: #ff8a7d; } #slist span { color: var(--dim); }
+  /* mixer: un fader per pad del banco mostrato */
+  #mixer { margin: 0 10px 10px; padding: 8px 10px 10px; }
+  #faders { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 6px; }
+  .fd { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+  .fd .lb { font: 700 11px ui-monospace, Menlo, monospace; color: var(--dim); }
+  .fd .trk { position: relative; width: 100%; max-width: 54px; height: clamp(70px, 11vh, 130px); background: #0a0b0c; border-radius: 6px; touch-action: none; cursor: ns-resize;
+             box-shadow: inset 0 0 0 1px #2c2f35; overflow: hidden; }
+  .fd .fl { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(0deg, #1f6f86, var(--cyan)); }
+  .fd .cap { position: absolute; left: 12%; right: 12%; height: 6px; margin-bottom: -3px; background: #e9e9ec; border-radius: 3px; }
+  .fd .vl { font: 700 14px ui-monospace, Menlo, monospace; } .fd .sn { font-size: 10px; color: var(--dim); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fd.off .trk { cursor: not-allowed; } .fd.off .fl { background: #4a2522; } .fd.off .vl { color: var(--red); }
+  .fd.s .trk { box-shadow: inset 0 0 0 2px var(--yel); } .fd.busy .vl { color: var(--yel); }
+  @media (min-width: 900px) {
+    section:first-child > .card:nth-child(2) { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    #pads { flex: 1; grid-template-rows: repeat(4, minmax(0, 1fr)); min-height: 0; } .pad { aspect-ratio: auto; min-height: 0; }
+  }
   #st { color: #55585f; font-size: 11px; padding: 4px 10px; }
 </style>
 </head>
@@ -128,6 +144,10 @@
       <div id="slist"></div>
     </div>
   </section>
+</div>
+<div class="card" id="mixer">
+  <div class="ttl"><span>MIXER</span><span id="mixInfo">livelli dei pad: in attesa</span></div>
+  <div id="faders"></div>
 </div>
 <div id="fkeys">
   <div data-k="auto">AUTO</div><div data-k="sample">SAMPLE</div><div data-k="grid">GRID</div>
@@ -247,8 +267,53 @@ function drawPads() {
 }
 $('banks').onclick = function (e) {                                // solo vista: il banco dell'MPC non cambia
   var k = e.target.getAttribute('data-b'); if (k === null) return;
-  M.showBank = +k === M.bank ? -1 : +k; drawPads();
+  M.showBank = +k === M.bank ? -1 : +k; MX.lv = []; drawPads(); drawMixer(); R.until = 0;
 };
+
+// ---------------- mixer: livello (0..100) dei 12 pad del banco mostrato; si scrive SOLO quel byte ----------------
+var MX = { lv: [], key: '', drag: -1, want: {}, sending: false, err: '' };
+function padFlags(p) { var mu = link.views[4]; return mu && mu.ver === 1 && mu.data.length >= 49 ? mu.data[1 + p] : 0; }
+function drawMixer() {                                             // i fader si creano una volta e poi si aggiornano (il dito resta sullo stesso elemento)
+  var b = viewBank(), box = $('faders');
+  if (!box.children.length) {
+    var html = '';
+    for (var k = 0; k < 12; k++) html += '<div class="fd" data-i="' + k + '"><div class="lb"></div><div class="trk"><div class="fl"></div><div class="cap"></div></div><div class="vl"></div><div class="sn"></div></div>';
+    box.innerHTML = html;
+  }
+  for (var i = 0; i < 12; i++) {
+    var p = b * 12 + i, f = padFlags(p), v = MX.want[i] !== undefined ? MX.want[i] : MX.lv[i], el = box.children[i], h = (v === undefined ? 0 : v) + '%';
+    el.className = 'fd' + (f & 5 ? ' off' : '') + (f & 2 ? ' s' : '') + (MX.want[i] !== undefined ? ' busy' : '');
+    el.children[0].textContent = 'ABCD'[b] + ('0' + (i + 1)).slice(-2);
+    el.children[1].children[0].style.height = h; el.children[1].children[1].style.bottom = h;
+    el.children[2].textContent = f & 1 ? 'MUTE' : f & 4 ? 'OFF' : v === undefined ? '--' : v;
+    el.children[3].textContent = M.pads[p] || '';
+  }
+  $('mixInfo').textContent = MX.err || (M.program >= 0 ? 'program ' + (M.program + 1) + ' · banco ' + 'ABCD'[b] + ' · trascina per cambiare il livello' : 'livelli dei pad: in attesa');
+}
+function setFader(el, ev) {
+  var i = +el.getAttribute('data-i'), r = el.querySelector('.trk').getBoundingClientRect();
+  var v = Math.max(0, Math.min(100, Math.round((r.bottom - ev.clientY) / r.height * 100)));
+  MX.want[i] = v; drawMixer(); sendLevels();
+}
+function sendLevels() {                                            // un POKE alla volta: durante il trascinamento vince l'ultimo valore
+  if (MX.sending || M.program < 0) return;
+  var keys = Object.keys(MX.want); if (!keys.length) return;
+  var i = +keys[0], v = MX.want[i], b = viewBank(), prog = M.program; MX.sending = true;
+  link.setLevel(prog, b * 12 + i, v).then(function () {
+    MX.lv[i] = v; MX.err = '';
+  }, function (e) { MX.err = 'livello non scritto: ' + e.message; MX.key = ''; }).then(function () {
+    if (MX.want[i] === v) delete MX.want[i];
+    MX.sending = false; drawMixer(); sendLevels();
+  });
+}
+$('faders').addEventListener('pointerdown', function (ev) {
+  var el = ev.target.closest('.fd'); if (!el || !ev.target.closest('.trk') || el.classList.contains('off') || M.program < 0) return;
+  MX.drag = +el.getAttribute('data-i'); try { el.querySelector('.trk').setPointerCapture(ev.pointerId); } catch (e) {} setFader(el, ev); ev.preventDefault();
+});
+$('faders').addEventListener('pointermove', function (ev) {
+  if (MX.drag < 0) return; setFader(document.querySelector('.fd[data-i="' + MX.drag + '"]'), ev);
+});
+['pointerup', 'pointercancel'].forEach(function (t) { $('faders').addEventListener(t, function () { MX.drag = -1; }); });
 
 // ---------------- memoria sample ----------------
 function drawSamples() {
@@ -270,13 +335,20 @@ function poll() {
   var now = Date.now();
   link.readProgram([]).then(function (p) {
     var changed = p.program !== M.program;
-    if (changed) M.pads = {};
+    if (changed) { M.pads = {}; MX.lv = []; }
     M.program = p.program; M.bank = p.bank;
     var banks = changed ? [p.bank, 0, 1, 2, 3].filter(function (x, i, a) { return a.indexOf(x) === i; }) : now - R.namesAt > 6000 ? [viewBank()] : [];
     if (changed || banks.length) { bar(); drawPads(); }
     return banks.reduce(function (ch_, bk) {
-      return ch_.then(function () { return link.readProgram([bk]); }).then(function (q) { for (var k in q.pads) M.pads[k] = q.pads[k]; drawPads(); });
+      return ch_.then(function () { return link.readProgram([bk]); }).then(function (q) { for (var k in q.pads) M.pads[k] = q.pads[k]; drawPads(); drawMixer(); });
     }, Promise.resolve()).then(function () { if (banks.length) R.namesAt = now; });
+  }).then(function () {
+    var b = viewBank(), key = M.program + ':' + b;
+    if (MX.drag >= 0 || Object.keys(MX.want).length) return;            // mentre muovi un fader non rileggiamo
+    return link.readLevels(M.program, b).then(function (lv) {
+      if (MX.drag >= 0 || Object.keys(MX.want).length || viewBank() !== b) return;
+      MX.lv = lv; MX.key = key; drawMixer();
+    });
   }).then(function () {
     if (now - R.samplesAt < 15000) return;
     return link.readSamples().then(function (s) { M.samples = s; R.samplesAt = now; drawSamples(); bar(); fkeys(); });
@@ -305,6 +377,7 @@ link.on('stats', function (x) {
 });
 var VTAB = { 2: 'grid', 3: 'scale', 4: 'mute' }, lastView = {};
 link.on('view', function (v) {
+  if (v.view === 4) setTimeout(drawMixer, 0);
   var key = v.data.join(), was = lastView[v.view]; lastView[v.view] = key;
   if (VTAB[v.view] && was !== undefined && was !== key) act(VTAB[v.view]);   // cambia sull'MPC -> AUTO ci va
   drawviews(); drawPads(); bar(); fkeys();
@@ -366,7 +439,7 @@ function drawviews() {
   }
   $('vMute').innerHTML = html || none('PAD MUTE', 'carica Pad Mute (SHIFT + TRACK MUTE)');
 }
-draw(); drawPads(); drawviews(); fkeys();
+draw(); drawPads(); drawviews(); fkeys(); drawMixer();
 function connect() {
   $('go').className = 'on'; $('go').textContent = '● Collegato';
   if (window.O5Native) {                                         // dentro la companion app: MIDI nativo (CoreMIDI)
