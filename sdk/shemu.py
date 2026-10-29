@@ -13,18 +13,24 @@ class SH:
         self.trace=False; self.steps=0; self.maxsteps=2_000_000
         self.wlog=[]         # log scritture (addr,val,size) per osservare copie
         self.logrange=None   # (lo,hi) per loggare scritture
+        self.alias=None      # (lo,hi,dst): [lo,hi) (P1) letto/scritto in dst.. (test: specchio della scratch, validate.Harness)
+        import os as _os
+        self.align=_os.environ.get('O5_ALIGN','1')!='0'   # 2026-10-17: accesso non allineato = errore come sull'SH (CPU Addr)
     def map_flash(self,data,base=0xA0000000): self.flash=data; self.flash_base=base
     def map_ram(self,base,size): self.ram[(base,base+size)]=bytearray(size)
     def _region(self,addr):
         addr&=0xffffffff
         # SDRAM (area 2) vista da P2 non cacheata 0xA8.. = stessa memoria fisica di P1 0x88.. (come sull'hardware)
         cands=(addr-0x20000000,addr) if 0xA8000000<=addr<0xB0000000 else (addr,)
+        al=self.alias
+        if al and al[0]<=cands[0]<al[1]: cands=(al[2]+cands[0]-al[0],)
         for a in cands:
             for (b,e),buf in self.ram.items():
                 if b<=a<e: return buf,a-b
         return None,None
     def rd(self,addr,size):
         addr&=0xffffffff
+        if self.align and size>1 and addr&(size-1): raise Exception("CPU Addr (read) %08x size %d pc %08x"%(addr,size,self.pc))
         if addr in self.mmio_r: return self.mmio_r[addr](addr)&((1<<(size*8))-1)
         if 0xFFFFFE90<=addr<=0xFFFFFEC0:   # TMU timer on-chip -> free-running
             self.timer=(self.timer+0x40)&0xffffffff; return self.timer&((1<<(size*8))-1)
@@ -36,6 +42,7 @@ class SH:
         return 0
     def wr(self,addr,val,size):
         addr&=0xffffffff; val&=(1<<(size*8))-1
+        if self.align and size>1 and addr&(size-1): raise Exception("CPU Addr (write) %08x size %d pc %08x"%(addr,size,self.pc))
         if self.logrange and self.logrange[0]<=addr<self.logrange[1]:
             self.wlog.append((self.pc,addr,val,size))
         if addr in self.mmio_w: self.mmio_w[addr](addr,val); return

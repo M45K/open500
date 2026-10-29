@@ -7,3 +7,7 @@ __pycache__/
 
 # add-ons you build at the root
 /*.WAV
+
+# add-ons built from sdk/ and sdk/addons
+/sdk/*.WAV
+/sdk/addons/*.WAV

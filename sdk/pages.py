@@ -34,6 +34,12 @@ STR_BLANK16 = 0x88506A58       # "                " (formato del selettore)
 VT_EMODEL, ENUM_FMT, VT_COMPOSITE = 0x885080D0, 0x88506BE4, 0x88507D1C   # modello ENUM + formato usato da tutti gli enum dell'OS
 SEL_CB      = 0x884E3E38      # callback OS del selettore sample (rotella = prev/next)
 INPUT_OBJ, ENABLE_DOIT = 0x88483FDC, 0x884E7372
+# Tasti 12 LEVELS / FULL LEVEL: l'OS li trasforma in DO IT (0x2E) / CANCEL (0x2D) solo se nell'oggetto tasti sono accesi
+# +0x9C (ENABLE_DOIT, LED 10) / +0x98 (ENABLE_CANCEL, LED 7) (FUN 0x884E8552 / 0x884E84CC); con +0x94 un DO IT o un CANCEL
+# li spegne tutti e due. Prima del 2026-10-24 le pagine accendevano solo DO IT: CANCEL andava solo se +0x98 era rimasto
+# acceso dalla pagina prima (HW: in Tap Chop CANCEL "non faceva niente" dopo il DO IT del menu di Chop Shop).
+ENABLE_CANCEL = 0x884E73B4
+CXSAVE = LOAD_SCRATCH + 0x24   # +0x98 com'era all'ingresso in una nostra pagina (+2 = salvato), rimesso all'uscita
 SET_FOCUS   = 0x884E9B4E
 GROUP       = 9                # gruppo parametri riservato agli addon
 EV_ENTER, EV_DOIT, EV_CANCEL = 0x23, 0x2E, 0x2D
@@ -54,18 +60,25 @@ class _Block:
     def string(self, s):
         a = self.alloc(len(s) + 1); self.buf[a-self.base:a-self.base+len(s)] = s.encode(); return a
 
-class PageAddon(Addon):
-    def __init__(self, name, open_hold=('SHIFT',), open_press=('STOP',)):
-        super().__init__(name)
-        self.cdly = 0x1000
+HOST = None    # add-on che ospita le pagine dei moduli importati dopo (es. wav_chopshop): vedi page_or_addon()
+
+def page_or_addon(name, **kw):
+    """Per i moduli che si costruiscono da soli O come pagina di un altro add-on: se pages.HOST e' impostato ritorna
+    una pagina nuova di quell'add-on (HOST.add_page), altrimenti un PageAddon autonomo (come sempre)."""
+    return HOST.add_page(name) if HOST is not None else PageAddon(name, **kw)
+
+class Page:
+    """Una pagina LCD nativa: widget, risposte GET/SET dei campi, eventi, DO IT, messaggi. PageAddon e' l'add-on con la
+    sua prima pagina; PageAddon.add_page() aggiunge altre pagine allo STESSO add-on (stesso codice, stessa scratch; label
+    con un prefisso proprio, contatore messaggi proprio). Per aprirle: OS_PUSH_PAGE(EVQ, p.page, 0); CANCEL torna indietro."""
+    def _page_init(self, host, ns):
+        self.host = host; self.ns = ns
         self.items = []          # ('label', text, x, y, w) | ('value', fid, label, x, y, fmt, lo, hi, slot) | ('selector',) | ('message',)
         self.slots = {}          # fid -> slot
-        self.defaults = {}       # slot -> valore iniziale
-        self.next_slot = LOAD_SCRATCH + 0x44      # slot valori dopo la firma di init_scratch (+0x40); controllo a +0x10..+0x1C
         self.next_fid = 1
-        self.doit_fn = None; self.open_hold = open_hold; self.open_press = open_press
+        self.doit_fn = None; self.open_press = None
         self.has_msg = False; self.has_sel = False
-        self.other = None        # nome della voce nel menu OTHER (header MPCADDN3, gestita dall'HUB)
+        self.other = None        # nome della voce nel menu OTHER (header MPCADDN3, gestita dall'HUB; solo la prima pagina)
         self.addr = {}           # riempito al build: page, first, msgw, msgt, values{fid: widget}
         self.fire_fn = None      # asm eseguito a ogni fire MENTRE la pagina e' quella attiva (coda+0x68)
         self.event_fns = {}      # tipo evento pagina -> fn(m, hret0, hret1) (es. 0x38 pad, 0x24 uscita)
@@ -74,10 +87,20 @@ class PageAddon(Addon):
         self.msg_fires = 0x180   # durata dei messaggi (fire)
         self.cancel_fn = None    # fn(m, hret1): asm su CANCEL prima dell'uscita (puo' consumarlo con bra hret1)
         self.far_hend = False    # True per handler > 4 KB (salto assoluto sopra l'handler)
-        self.background(self._page_body)
+        self.far_fire = False    # True per fire_fn > 4 KB (salto assoluto alla parte inattiva)
+        self.init_fn = None      # fn(m): asm eseguito UNA volta dopo i valori iniziali (scratch appena azzerata)
+        # timer del messaggio e "focus spostato": quelli della prima pagina restano a +0x1C/+0x20 della scratch
+        if host is self: self.SHOWMSG, self.MOVEDF = LOAD_SCRATCH + 0x1C, LOAD_SCRATCH + 0x20
+        else: self.SHOWMSG, self.MOVEDF = host.alloc_slot(), host.alloc_slot()
+    @property
+    def reserve(self): return self.host._reserve
+    @reserve.setter
+    def reserve(self, v): self.host._reserve = max(self.host._reserve, v)
+    def alloc_slot(self, default=0): return self.host._alloc_slot(default)
+    def alloc_buf(self, nbytes):
+        """spazio nella scratch (azzerato all'installazione) senza valore iniziale per parola: tabelle, piccoli buffer"""
+        return self.host._alloc_buf(nbytes)
     # ---- dichiarazione UI ----
-    def alloc_slot(self, default=0):
-        s = self.next_slot; self.next_slot += 4; self.defaults[s] = default; return s
     def label(self, text, x, y, w=None):
         self.items.append(('label', text, x, y, w or len(text)))
     def dlabel(self, x, y, w):
@@ -135,8 +158,8 @@ class PageAddon(Addon):
         for ch in suffix.ljust(16 - len(prefix) - 2)[:16 - len(prefix) - 2]: a.mov_imm(ord(ch), 0); a.movb_st(0, 12); a.add_imm(1, 12)
         a.mov_imm(0, 0); a.movb_st(0, 12)
         self._hcall(m, '__showmsg')
-    def _build_objects(self, base, handler):
-        b = _Block(base); page = b.alloc(0x38)
+    def _build_objects(self, b, handler):
+        page = b.alloc(0x38)
         b.w32(page+0x14, 0xF0000000); b.w32(page+0x1C, VT_PAGE); b.w32(page+0x28, 2); b.w32(page+0x2C, ROOT_PAGE); b.w32(page+0x30, handler)
         children = []; values = {}; first = None; msgw = msgt = 0; dlabels = {}
         for it in self.items:
@@ -177,7 +200,7 @@ class PageAddon(Addon):
                 for t in opts: b.buf[p:p+len(t)] = t.encode(); p += len(t) + 1
                 desc = b.alloc(16); mo = b.alloc(0x24); o = b.alloc(0x38)
                 b.w32(desc, len(opts)); b.w32(desc+4, strs); b.w32(desc+0xC, rect(x, y, w))
-                var = self.scratch + (slot - LOAD_SCRATCH)          # segue la base di costruzione (rilocazione)
+                var = self.host.scratch + (slot - LOAD_SCRATCH)     # segue la base di costruzione (rilocazione)
                 b.w32(mo+0, 0x00300000); b.w32(mo+4, o); b.w32(mo+8, 1); b.w32(mo+0xC, var); b.w32(mo+0x10, ENUM_FMT)
                 b.w32(mo+0x14, VT_EMODEL); b.w32(mo+0x20, desc)
                 # widget COMPOSITO come tutti gli enum dell'OS (0x38 B): +0x28 etichetta (0 = nessuna), +0x2E rect etichetta,
@@ -192,17 +215,12 @@ class PageAddon(Addon):
             children.append(msgw)
         b.w32(page+0xC, children[0])
         for a_, n_ in zip(children, children[1:]): b.w32(a_+8, n_)
-        return bytes(b.buf), dict(page=page, first=first, msgw=msgw, msgt=msgt, values=values, sel=children[0] if self.has_sel else 0, dlabels=dlabels)
-    def _page_body(self, m):
+        return dict(page=page, first=first, msgw=msgw, msgt=msgt, values=values, sel=children[0] if self.has_sel else 0, dlabels=dlabels)
+    def _emit_page(self, m):
+        """asm della pagina (dentro il body dell'add-on, con il prefisso di label della pagina attivo)"""
         a = m.a; A = self.addr
-        m.init_scratch(self.next_slot - LOAD_SCRATCH)
-        # valori iniziali (una volta: la scratch e' azzerata da init_scratch, INIT segnala)
-        INIT, ARMED, PREVK, SHOWMSG = LOAD_SCRATCH + 0x10, LOAD_SCRATCH + 0x14, LOAD_SCRATCH + 0x18, LOAD_SCRATCH + 0x1C
-        MOVEDF = LOAD_SCRATCH + 0x20      # keep_focus: il messaggio ha spostato il focus dal selettore
-        ld(m, INIT, 2); a.tst_rr(2, 2); di = m.newlabel('di'); m.bf_far(di)
-        for slot, val in self.defaults.items(): sti(m, val, slot)
-        sti(m, 1, INIT); a.deflabel(di)
-        m.pool_jump()
+        ARMED, PREVK = LOAD_SCRATCH + 0x14, LOAD_SCRATCH + 0x18
+        SHOWMSG, MOVEDF = self.SHOWMSG, self.MOVEDF   # MOVEDF (keep_focus): il messaggio ha spostato il focus dal selettore
         # timer messaggio
         if self.has_msg:
             ld(m, SHOWMSG, 13); a.tst_rr(13, 13); nomsg = m.newlabel('nomsg'); m.bt_far(nomsg)
@@ -226,7 +244,10 @@ class PageAddon(Addon):
             a.deflabel(no); m.pool_jump()
         if self.fire_fn or self.inactive_fn:
             nf = m.newlabel('nf'); fd_ = m.newlabel('fdone')
-            m.imm32(EVQ + 0x68, 1); a.movl_ld(1, 2); m.imm32(A['page'], 3); a.cmpeq(3, 2); m.bf_far(nf)
+            m.imm32(EVQ + 0x68, 1); a.movl_ld(1, 2); m.imm32(A['page'], 3); a.cmpeq(3, 2)
+            if self.far_fire:                       # fire_fn > 4 KB (es. USB MIDI v7): salto assoluto alla parte inattiva
+                fy = m.newlabel('fy'); a.bt_lbl(fy); a.movl_pool(nf, 2); a.jmp(2); a.nop(); a.deflabel(fy)
+            else: m.bf_far(nf)
             if self.fire_fn: self.fire_fn(m)
             m.a.movl_pool(fd_, 2); a.jmp(2); a.nop(); m.pool_jump()
             a.deflabel(nf)
@@ -306,26 +327,88 @@ class PageAddon(Addon):
             m.imm32(EVQ + 0x70, 1); a.mov_imm(1, 0); a.movl_st(0, 1)
             a.ldsl_pr(); a.rts(); a.nop(); m.pool_jump()
         a.deflabel(hend)
+
+class PageAddon(Page, Addon):
+    """Add-on con pagine native: la prima pagina e' l'add-on stesso (pg.value(...), pg.on_doit(...)); altre con add_page()."""
+    def __init__(self, name, open_hold=('SHIFT',), open_press=('STOP',)):
+        Addon.__init__(self, name)
+        self.cdly = 0x1000
+        self.defaults = {}       # slot -> valore iniziale (di tutte le pagine)
+        self.next_slot = LOAD_SCRATCH + 0x44      # slot valori dopo la firma di init_scratch (+0x40); controllo a +0x10..+0x20
+        self._reserve = 0; self.subpages = []
+        self._page_init(self, '')
+        self.open_hold = open_hold; self.open_press = open_press
+        self.background(self._page_body)
+    def _alloc_slot(self, default=0):
+        s = self.next_slot; self.next_slot += 4; self.defaults[s] = default; return s
+    def _alloc_buf(self, nbytes):
+        s = self.next_slot; self.next_slot += (nbytes + 3) & ~3; return s
+    def add_page(self, name):
+        """nuova pagina dello stesso add-on (stessa API di PageAddon per widget ed eventi); 'name' = prefisso delle sue label"""
+        assert name and all(p.name != name for p in self.subpages), "nome pagina doppio: %r" % name
+        p = Page(); p.name = name; p._page_init(self, name + ':'); self.subpages.append(p); return p
+    def _pages(self): return [self] + self.subpages
+    def _page_body(self, m):
+        a = m.a
+        assert self.next_slot - LOAD_SCRATCH <= 0x1000, "scratch oltre 4 KB: %#x" % (self.next_slot - LOAD_SCRATCH)
+        m.init_scratch(self.next_slot - LOAD_SCRATCH)
+        # valori iniziali (una volta: la scratch e' azzerata da init_scratch, INIT segnala)
+        INIT = LOAD_SCRATCH + 0x10
+        ld(m, INIT, 2); a.tst_rr(2, 2); di = m.newlabel('di'); m.bf_far(di)
+        for slot, val in self.defaults.items(): sti(m, val, slot)
+        for p in self._pages():
+            if p.init_fn: a.ns = p.ns; p.init_fn(m); a.ns = ''
+        sti(m, 1, INIT); a.deflabel(di)
+        m.pool_jump()
+        # DO IT e CANCEL accesi finche' e' aperta una nostra pagina; all'uscita CANCEL (+0x98) torna com'era (nelle pagine
+        # dell'OS FULL LEVEL deve restare FULL LEVEL)
+        ours = m.newlabel('ours'); notours = m.newlabel('notours'); kdone = m.newlabel('kdone'); have = m.newlabel('have')
+        m.imm32(EVQ + 0x68, 1); a.movl_ld(1, 2)
+        for p in self._pages(): m.imm32(p.addr['page'], 3); a.cmpeq(3, 2); m.bt_far(ours)
+        a.bra_lbl(notours); a.nop()
+        m.pool_jump()
+        a.deflabel(ours)
+        ld(m, CXSAVE, 0); a.tst_rr(0, 0); a.bf_lbl(have)
+        m.imm32(INPUT_OBJ + 0x98, 1); a.movl_ld(1, 0); a.tst_rr(0, 0); a.movt(0); a.mov_imm(3, 3); a.sub(0, 3); st(m, 3, CXSAVE)   # 2 + (acceso)
+        a.deflabel(have)
+        m.imm32(INPUT_OBJ, 4); a.mov_imm(1, 5); m.imm32(ENABLE_CANCEL, 2); a.jsr(2); a.nop()
+        m.imm32(INPUT_OBJ, 4); a.mov_imm(1, 5); m.imm32(ENABLE_DOIT, 2); a.jsr(2); a.nop()
+        a.bra_lbl(kdone); a.nop()
+        m.pool_jump()
+        a.deflabel(notours)
+        ld(m, CXSAVE, 5); a.tst_rr(5, 5); a.bt_lbl(kdone)
+        a.add_imm(-2, 5); m.imm32(INPUT_OBJ, 4); m.imm32(ENABLE_CANCEL, 2); a.jsr(2); a.nop(); sti(m, 0, CXSAVE)
+        a.deflabel(kdone)
+        m.pool_jump()
+        for p in self._pages():
+            a.ns = p.ns; p._emit_page(m); a.ns = ''
     def _asm(self, base):
         self.a = SHAsm(base); self.scratch = base + SLOT_CODE_MAX; self.magic = (zlib.crc32(self.name.encode()) & 0xffffffff) | 1
         self.a.stsl_pr(); self._body(self); self.a.ldsl_pr(); self.a.rts(); self.a.nop(); self._emit_helpers()
         return self.a.assemble()
     def _build_at(self, base):
         # passata 1: indirizzi dummy DISTINTI (stessa dimensione pool), poi oggetti a base+len codice, passata 2 reale
-        self.addr = dict(page=0xDEAD0001, first=0xDEAD0002, msgw=0xDEAD0003, msgt=0xDEAD0004, sel=0xDEAD0005, values={it[1]: 0xDEAD0010 + it[1] for it in self.items if it[0] in ('value', 'choice')},
-                         dlabels={it[1]: 0xDEAD0100 + it[1] for it in self.items if it[0] == 'dlabel'})
-        code = self._asm(base); code_len = (len(code) + 3) & ~3; handler = self.a.labels['handler']
-        objs, addr = self._build_objects(base + code_len, handler)
-        self.addr = addr; code2 = self._asm(base)
-        assert len(code2) == len(code) and self.a.labels['handler'] == handler, "dimensione codice cambiata tra le passate"
-        self._last = (code_len, len(objs), handler, addr)
-        return code2 + bytes(code_len - len(code2)) + objs
+        pages = self._pages()
+        for k, p in enumerate(pages):
+            d = 0xDEAD0000 + (k << 12)
+            p.addr = dict(page=d + 1, first=d + 2, msgw=d + 3, msgt=d + 4, sel=d + 5, values={it[1]: d + 0x10 + it[1] for it in p.items if it[0] in ('value', 'choice')},
+                          dlabels={it[1]: d + 0x100 + it[1] for it in p.items if it[0] == 'dlabel'})
+        code = self._asm(base); code_len = (len(code) + 3) & ~3; hs = [self.a.labels[p.ns + 'handler'] for p in pages]
+        b = _Block(base + code_len)
+        for p, h in zip(pages, hs): p.addr = p._build_objects(b, h)
+        code2 = self._asm(base)
+        assert len(code2) == len(code) and [self.a.labels[p.ns + 'handler'] for p in pages] == hs, "dimensione codice cambiata tra le passate"
+        self._last = (code_len, len(b.buf), hs[0], self.addr)
+        return code2 + bytes(code_len - len(code2)) + bytes(b.buf)
     def build_wav(self, out, name=None):
         """WAV rilocabile (MPCADDN3) per l'HUB: la voce OTHER (se other_menu) e la pagina vanno nell'header."""
         self._build_at(ADDON_BASE); code_len, objs_len, handler, addr = self._last     # indirizzi a ADDON_BASE (slot 0)
-        pcm, nrel = pack_addon3(self.name, self._build_at, page_off=addr['page'] - ADDON_BASE if self.other else None, menu=self.other)
+        built = [(p, p.addr, self.a.labels[p.ns + 'handler']) for p in self._pages()]
+        pcm, nrel = pack_addon3(self.name, self._build_at, page_off=addr['page'] - ADDON_BASE if self.other else None, menu=self.other,
+                                 reserve=getattr(self, 'reserve', 0))
         n = wav_from_pcm(out, pcm)
         print("%s [pagina nativa, HUB]: %d byte codice + %d byte oggetti, %d rilocazioni, pagina @%08x%s -> %s (%d byte)" % (
             self.name, code_len, objs_len, nrel, addr['page'], (" voce OTHER '%s'" % self.other) if self.other else "", out, n))
-        self.page = addr['page']; self.handler = handler; self.first = addr['first']; self.msgw = addr['msgw']; self.msgt = addr['msgt']; self.values = addr['values']; self.dlabels = addr['dlabels']
+        for p, ad, hd in built:
+            p.page = ad['page']; p.handler = hd; p.first = ad['first']; p.msgw = ad['msgw']; p.msgt = ad['msgt']; p.values = ad['values']; p.dlabels = ad['dlabels']
         return out

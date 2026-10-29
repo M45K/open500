@@ -27,7 +27,7 @@ Uso tipico:
 Install: copia il .bin come MPC500.bin sulla root della CF, alimentatore AC, tieni SHIFT, accendi, premi REC.
 Recovery: riflasha mpc500.bin originale (bootloader intatto).
 """
-import struct, zlib
+import os, struct, zlib
 from shasm import SHAsm
 
 # --- costanti hardware/firmware (tutte confermate) ---
@@ -106,9 +106,11 @@ LOAD_SCRATCH= ADDON_BASE + SLOT_CODE_MAX   # scratch degli addon caricabili (ril
 ADDON3_MAGIC= b'MPCADDN3'
 ADDON3_HDR  = 48               # magic8, u32 len(body), u32 sum16(body), nome8, u32 code_len, u32 page_off(-1=nessuna), menu16
                                # body = codice (code_len, multiplo di 4) + u32 nreloc + u32 off[nreloc]
-def pack_addon3(name, build, page_off=None, menu=None, base=None, magic=ADDON3_MAGIC):
+def pack_addon3(name, build, page_off=None, menu=None, base=None, magic=ADDON3_MAGIC, reserve=0):
     """build(base) -> bytes (codice+oggetti assemblati con base 'base'). Costruisce a ADDON_BASE e ADDON_BASE+0x1000 e
-    ricava la tabella di rilocazione dalle parole (allineate a 4) che differiscono esattamente di 0x1000."""
+    ricava la tabella di rilocazione dalle parole (allineate a 4) che differiscono esattamente di 0x1000.
+    reserve: byte dalla base che l'addon usa davvero (buffer tra il codice e la scratch, es. Master FX, Trans-Chop): il
+    body e' allungato con zeri fino a li', cosi' l'HUB v2 (pagine) non mette altri addon in quella memoria."""
     base = ADDON_BASE if base is None else base
     c0 = build(base); c1 = build(base + 0x1000)
     assert len(c0) == len(c1), "dimensione diversa tra le due costruzioni"
@@ -120,6 +122,7 @@ def pack_addon3(name, build, page_off=None, menu=None, base=None, magic=ADDON3_M
             assert w1 - w0 == 0x1000, "parola @%#x non rilocabile: %08x vs %08x" % (off, w0, w1)
             relocs.append(off)
     body = c0 + struct.pack('<I', len(relocs)) + b''.join(struct.pack('<I', o) for o in relocs)
+    body += bytes(max(0, reserve - len(body)))
     assert len(body) <= SLOT_CODE_MAX, "addon troppo grande per uno slot: %d > %d" % (len(body), SLOT_CODE_MAX)
     sm = sum(struct.unpack('<%dH' % (len(body)//2), body)) & 0xffffffff
     nm = name.encode()[:8].ljust(8, b' ')
@@ -130,12 +133,17 @@ def pack_addon3(name, build, page_off=None, menu=None, base=None, magic=ADDON3_M
 def wav_from_pcm(out, pcm):
     pcm += b'\0' * max(0, WAV_MIN - len(pcm))
     if len(pcm) & 1: pcm += b'\0'
-    open(out, 'wb').write(wav_wrap(pcm)); return len(pcm) + 44
+    tmp = out + '.tmp'; open(tmp, 'wb').write(wav_wrap(pcm)); os.replace(tmp, out)   # atomico: check_all legge i WAV in parallelo
+    return len(pcm) + 44
 WAV_MIN     = 0x2000           # padding minimo del chunk data (silenzio) per un WAV "normale"
 
 # --- API EVENTI dell'OS (reverse 2026-09-15: FUN_a0043872 key_id->evento, FUN_a0043d7a rotella, post @0xA0042496) ---
 EVQ           = 0x88483EE4     # coda eventi UI (get_target() la ritorna costante): +4 wr, +8 rd, +0xC mask, +0x10 buf, entry 8B
 OS_POST_EVENT = 0x884E6DF2     # post_event(r4=coda, r5=&evt{s16 type, u16 code, s32 data}) — copia l'evento nella coda
+SMP_MGR       = 0x8848ED30     # gestore dei sample: +0 inizio lista, +4 limite, +8 sample corrente
+EXTRACT_CMD   = 0x884C5E90     # Extract(r4=SMP_MGR): start..end del sample corrente -> sample nuovo (diventa il corrente)
+COPY_CMD      = 0x884C5FA0     # Copy(r4=SMP_MGR): copia intera del sample corrente (nome nuovo come l'Extract)
+NAME_KEEP     = 13             # os_extract: caratteri del nome del sorgente tenuti durante la chiamata
                                # tasti: {2|3, code, 0}. Rotella: {6, 0, delta} (il delta e' nel campo data, NON in code)
 EV_PRESS, EV_RELEASE, EV_WHEEL = 2, 3, 6
 OS_GOTO_PAGE  = 0x884E6EF4     # goto_page(r4=coda EVQ, r5=pagina) (flash 0xA0042598): SOLO globale + evento 0x23 (la pagina si
@@ -151,7 +159,7 @@ LCD_SHADOW     = LCD_OBJ + 0x28  # (FUN_a0025d30) manda all'LCD solo i char dive
 LCD_ROWS       = LCD_OBJ + 9     # byte: righe del flush (2)
 LCD_DRV        = LCD_OBJ + 0x10  # driver HD44780 dell'OS: [0]=indirizzo registro comandi, [1]=indirizzo registro dati
 LCD_DRV_DATA   = LCD_DRV + 4     # (la busy-wait legge *[0]: NON deviare i comandi; i caratteri passano da [1])
-LCD_DUMMY      = 0x88F000F0      # dove finiscono i caratteri dell'OS mentre lo schermo e' dell'addon
+LCD_DUMMY      = 0x88F000F0      # VECCHIO (area di prima): sull'MPC di oggi qui ci sono i SAMPLE -> non usarlo; os_lcd_off(dummy)
 EV_SHIFT      = 0x40           # modificatore OR-ato al code quando SHIFT e' tenuto (obj+0xB4)
 EVCODE = {                     # nome tasto -> code evento (NON e' l'id matrice)
     'CURSOR_DOWN':0x01,'CURSOR_LEFT':0x02,'CURSOR_RIGHT':0x03,'CURSOR_UP':0x04,'FULL_LEVEL':0x05,'LEVELS_12':0x06,
@@ -279,10 +287,24 @@ class Addon:
         self.imm32(data&0xffffffff,0); a.movl_st_disp(0,4,15)
         self.imm32(EVQ,4); a.mov_rm_rn(15,5); self.imm32(OS_POST_EVENT,2); a.jsr(2); a.nop()
         a.add_imm(8,15)
-    def os_lcd_off(self):
-        """Devia i CARATTERI del driver LCD dell'OS su un byte di RAM: lo schermo e' dell'addon finche' non chiami
-        os_lcd_on(). (I comandi dell'OS - posizione cursore - continuano ad arrivare all'LCD: innocui.)"""
-        a=self.a; self.imm32(LCD_DRV_DATA,1); self.imm32(LCD_DUMMY,0); a.movl_st(0,1)
+    def os_extract(self, src, cmd=EXTRACT_CMD):
+        """Extract (o Copy: cmd=COPY_CMD) dell'OS sul sample corrente; MGR+8 = il blocco nel registro 'src' (r8-r14: l'OS
+        lo conserva). r0 = esito (0 ok, 3 memoria piena, 0x21 nessun sample); usa r1-r7. Durante la chiamata il nome del
+        sorgente e' accorciato a NAME_KEEP caratteri e poi rimesso com'era. Il nome nuovo lo inventa l'OS (0x884C605E:
+        finche' esiste nella lista, 0x884B93A6 = +1 sulle cifre finali, al massimo 3): con un nome di 15-16 caratteri c'e'
+        posto per UNA cifra, che gira 2..9, 0, 1, e dall'11a copia dello stesso sample l'OS cerca per sempre (HW
+        2026-10-27: Tap fermo a 'Slicing 11/12', 10 fette ok). Con 13 caratteri: fino a 3 cifre (~1000 nomi)."""
+        a = self.a; assert 8 <= src <= 14
+        a.mov_rm_rn(src, 1); a.add_imm(4 + NAME_KEEP, 1); a.movb_ld(1, 0); a.movl_st_dec(0, 15)   # carattere salvato
+        a.mov_imm(0, 0); a.movb_st(0, 1)
+        self.imm32(SMP_MGR, 4); self.imm32(cmd, 2); a.jsr(2); a.nop()
+        a.movl_ld_inc(15, 1); a.mov_rm_rn(src, 2); a.add_imm(4 + NAME_KEEP, 2); a.movb_st(1, 2)   # rimesso
+    def os_lcd_off(self, dummy):
+        """Devia i CARATTERI del driver LCD dell'OS sul byte 'dummy' (nella memoria dell'addon: un indirizzo della sua
+        scratch o della sua area): lo schermo e' dell'addon finche' non chiami os_lcd_on(). (I comandi dell'OS -
+        posizione cursore - continuano ad arrivare all'LCD: innocui.) 2026-10-26: prima usava LCD_DUMMY fisso, che
+        con l'area di oggi cade nella memoria dei sample."""
+        a=self.a; self.imm32(LCD_DRV_DATA,1); self.imm32(dummy,0); a.movl_st(0,1)
     def os_lcd_on(self):
         """Ripristina il registro dati vero e forza il ridisegno completo (os_redraw)."""
         a=self.a; self.imm32(LCD_DRV_DATA,1); self.imm32(LCD_DATA,0); a.movl_st(0,1); self.os_redraw()

@@ -13,6 +13,7 @@ from mpcmod import (SCRATCH_MAGIC, VBOX_OFF, VBOX_MAGIC, VSLOT, VBOX_N, V_SEQ, V
 
 MGR, SIG2, FRAMES = 0x8848ED30, 0x8B2A3D01, 0x881C05F0
 VIEW_CHOP, VIEW_GRID, VIEW_SCALE, VIEW_MUTE, VIEW_MFX, VIEW_SFX, VIEW_PADS, VIEW_THRU = range(1, 9)
+VIEW_SEQ, VIEW_MIX, VIEW_MEM = 9, 10, 11       # 2026-10-17: PADS (7), MIX (10), MEM (11) = viste di SISTEMA (MIDI Screen)
 
 class View:
     def __init__(self, view, ver=1):

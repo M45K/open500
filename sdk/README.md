@@ -5,8 +5,14 @@ the HUB installs it into MODE → OTHER. You write it in **Python**, which gener
 small assembler, and you test it in an **emulator** before touching the hardware.
 
 > Status: early. The API works and runs every official add-on, but names and details may still change.
-> Comments inside the core files are mostly in Italian (the project started that way); this README and the
-> example are the reference.
+> The **source of every official add-on** is in `sdk/addons/` (Open500 0.2). Comments and test output inside the
+> core files and the add-ons are mostly in Italian (the project started that way); this README and the example are
+> the reference.
+
+## With Claude Code
+Open the repository folder in Claude Code: the `open500-addon` skill (`.claude/skills/`) loads by itself and follows
+this README, the example and the official add-ons. Describe the tool; it builds it, runs the emulator test and tells
+you what to try on the MPC.
 
 ## What you need
 - Python 3.9+ (no other packages).
@@ -20,6 +26,24 @@ python3 sdk/examples/hello_page.py
 ```
 Builds `HELLO.WAV` and tests it in the emulator. Copy it to the CF card next to `HUB.WAV`, LOAD both, then
 MODE → OTHER → "Hello". Read `examples/hello_page.py`: it is 40 lines and shows every basic piece.
+
+## Official add-ons (source)
+Each file builds its WAV and runs its full emulator test (same `MPC500.bin` / `OPEN500_FIRMWARE` as above):
+```
+python3 sdk/addons/wav_padtools.py        # -> sdk/PADTOOLS.WAV, identical to docs/addons/PADTOOLS.WAV
+```
+| Source | WAV | Good example of |
+|---|---|---|
+| `addons/wav_chopshop.py` | `CHOPSHOP.WAV` | several pages in one add-on (menu + 4 modes) |
+| `addons/wav_autochop2.py`, `wav_transchop.py`, `wav_tapchop.py`, `wav_autowarp.py` | (pages of Chop Shop) | samples: start/end, Extract, audition, pads during playback |
+| `addons/wav_samplefx.py` | `SAMPLEFX.WAV` | processing a sample into a new one (Copy/Extract, preview) |
+| `addons/wav_padtools.py` | `PADTOOLS.WAV` | program pads, multi-step flows with confirmation and CANCEL |
+| `addons/wav_scalepads.py`, `wav_padmute.py` | `SCALEPAD.WAV`, `PADMUTE.WAV` | pads, views for the remote screen |
+| `addons/wav_grid.py`, `wav_seqtools.py` | `GRID.WAV`, `SEQTOOLS.WAV` | reading and editing the sequence |
+| `addons/wav_masterfx.py`, `wav_inthru.py` | `MASTERFX.WAV`, `INTHRU.WAV` | audio: effects on the mix, line input |
+| `addons/wav_midiscreen.py`, `wav_usbmidi.py` | `MIDISCR.WAV`, `USBMIDI.WAV` | MIDI and USB, the remote-screen protocol |
+| `hub.py` | `HUB.WAV` | the add-on manager itself |
+They are the best documentation of the OS: every address they use is commented where it was found.
 
 ## How it works (one minute)
 - The Open500 loader (in the patched OS) loads the **HUB**; the HUB scans the sample list after every LOAD and
@@ -47,6 +71,7 @@ pg.on_inactive(fn)    # fn(m): every frame while it is NOT open (keep it tiny)
 pg.on_doit(fn)        # fn(m): DO IT pressed
 pg.on_event(0x38, fn) # fn(m, hret0, hret1): pad events (code = pad 0..11, data = velocity, 0 = release)
 pg.on_event(2, fn)    #                       key presses (code = key, see mpcmod.EVCODE)
+pg.cancel_fn = fn     # fn(m, hret1): CANCEL inside a multi-step flow (go back one step, see Rules)
 pg.build_wav("MYTOOL.WAV")
 ```
 In an event handler, `r8` points to the event `{u16 type, u16 code, s32 data}`; finish with a jump to `hret1`
@@ -61,11 +86,21 @@ In an event handler, `r8` points to the event `{u16 type, u16 code, s32 data}`; 
 - `m.pool_jump()`: drop the literal pool here (needed every ~1 KB of code, see Pitfalls).
 - `pg.emit_message(m, "Done")`, `pg.emit_message_dec(m, "Copied ", slot, " pads")`.
 
+### Several pages in one add-on
+`p = pg.add_page("name")` returns a page with the same API (selector, value, choice, label, dlabel, message,
+on_doit, on_fire, on_inactive, on_event, cancel_fn). Same code and same scratch; its labels get the prefix `name:`
+and it has its own message timer (`p.SHOWMSG`). The OTHER entry opens the first page; open the others with
+`OS_PUSH_PAGE(EVQ, p.page, 0)`, and CANCEL goes back (the OS page stack). A module can build alone **or** as a page of
+another add-on: `pg = page_or_addon("name", ...)` (when `pages.HOST` is set it returns `HOST.add_page(...)`). Chop Shop
+does exactly this with Auto Chop, Trans-Chop, Tap and Auto Warp. `p.alloc_buf(n)` reserves scratch bytes without a
+start value (tables). The scratch is 4 KB, checked at build time.
+
 ### Views (remote screen / companion app)
-New add-ons should publish their state for the remote screen (`docs/PROTOCOL.md`):
+New add-ons should publish their state for the remote screen (protocol notes: `docs/PROTOCOL.md`, receiver:
+`docs/o5link.js`):
 ```python
 from view import View
-v = View(23, ver=1)          # views 10-23 are free: ask in an issue to get a number assigned
+v = View(23, ver=1)          # views 1-11 are taken, 12-23 are free: ask in an issue to get a number assigned
 v.publish(m, BUF_SLOT, n)    # in fire/inactive: copies only when the bytes changed
 v.emit_subs(m)               # once, outside the normal code flow
 ```
@@ -77,7 +112,7 @@ v.emit_subs(m)               # once, outside the normal code flow
 | Pad block (48 pads) | program + `0x18 + pad*0xA4`: 4 sample layers × 0x18 (name16, +0x11 level, +0x14 tune s16 cents), +0x62 poly/mono, +0x63 mute group, +0x8F mixer level |
 | Pad → MIDI note | program + `0x1ED8` (48 bytes); note → pad at + `0x1F08` |
 | Current bank | byte 0 of `0x8849C98C` (0 = A) |
-| Sample list | manager `0x8848ED30`: +8 current sample block (+4 name, +0x18 length, +0x20 start, +0x24 end, PCM from +0x100) |
+| Sample list | manager `0x8848ED30`: +8 current sample block (+4 name, +0x18 length, +0x20 start, +0x24 end, +0x30 tune s16 cents, PCM from +0x100) |
 | Current sequence | `*(u32*)0x8847CBC8`: +0x1C bars, +0x30 bar table, events 16 B from +0x1C10 (tick, track, 0x90, note, vel, dur) |
 | UI event queue | `0x88483EE4` (+0x68 current page, +0x70 = 1 → redraw) |
 Addresses are for OS 1.31 only. More in the official add-ons' source headers.
@@ -91,6 +126,18 @@ Addresses are for OS 1.31 only. More in the official add-ons' source headers.
 - Code + objects ≤ 28 KB; private scratch ≤ 4 KB. The HUB packs add-ons in 4 KB pages: memory between the end of your
   code and your scratch belongs to OTHER add-ons, unless you reserve it (`pg.reserve = SLOT_CODE_MAX`, as Master FX
   and Trans-Chop do for their buffers).
+- **DO IT and CANCEL** (12 LEVELS / FULL LEVEL) work as DO IT / CANCEL only while the OS flags are on; the
+  framework keeps both on while one of your pages is open and restores FULL LEVEL when you leave. In a flow with
+  several steps **CANCEL goes back one step** (`pg.cancel_fn`); only from the first step it leaves.
+- **Long OS work, one piece per fire.** While your handler or fire runs, the MPC is frozen (display, keys,
+  sequencer). Extracting 12 slices is 12 fires with a progress message (see Tap), not one loop.
+- **Extract / Copy only through `m.os_extract(src_reg, cmd)`.** The OS names the new sample by bumping the digits
+  at the end of the source name; with a 15-16 character name there is room for one digit only, and the 11th copy of
+  the same sample searches forever (MPC frozen). `os_extract` shortens the source name to 13 characters during the
+  call and puts it back. Never Extract with end < start (negative length = the OS copies ~4 G samples).
+- **The audition player** (what you hear in TRIM and from the official add-ons' previews) plays samples 1:1 at
+  44.1 kHz whatever their rate, applies the sample Tune (+0x30), and plays the WHOLE sample ignoring start/end when
+  the u16 at +0x3E is not 0 (WAVs from sample packs): clear it around the play call and put it back.
 - Test in the emulator first; then on hardware with a backup of your work. Flashing the original OS always restores
   the machine (the bootloader is never touched).
 

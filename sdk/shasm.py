@@ -15,8 +15,15 @@ class SHAsm:
         self.fixups12=[]        # (index, kind, label) per bra/bsr label
         self._pooled=set(); self._resolved=[]   # pool multiple (pool_here)
         self.pool_lfix=[]       # (word_index, label): literal = indirizzo di una label (risolto a fine)
+        self.ns=''              # prefisso delle label (pages.add_page: piu' pagine nello stesso codice senza collisioni)
+    def _n(self,name):
+        # con un prefisso attivo ogni label con nome diventa ns+nome; quelle di Addon.newlabel ('__xxx<n>') sono gia' univoche
+        if not self.ns or not isinstance(name,str): return name
+        if name.startswith('P1:'): return 'P1:'+self._n(name[3:])
+        if name.startswith('__') and name[-1:].isdigit(): return name
+        return self.ns+name
     def _emit(self,w): self.words.append(w & 0xffff)
-    def label(self,name): self.labels[name]=len(self.words)*2+self.base
+    def label(self,name): self.deflabel(name)
     # --- istruzioni ---
     def nop(self): self._emit(0x0009)
     def rts(self): self._emit(0x000b)
@@ -39,16 +46,18 @@ class SHAsm:
     def extu_b(self,rm,rn): self._emit(0x600C|(rn<<8)|(rm<<4))    # extu.b Rm,Rn
     def shll8(self,rn): self._emit(0x4018|(rn<<8))                # shll8 Rn
     def add_imm(self,imm,rn): self._emit(0x7000|(rn<<8)|(imm&0xff)) # add #imm,Rn
-    def deflabel(self,name): self.labels[name]=len(self.words)*2+self.base
+    def deflabel(self,name):
+        name=self._n(name); assert name not in self.labels, 'label %s definita due volte' % name
+        self.labels[name]=len(self.words)*2+self.base
     def bt_lbl(self,name):
-        idx=len(self.words); self._emit(0x8900); self.fixups8.append((idx,name))
+        idx=len(self.words); self._emit(0x8900); self.fixups8.append((idx,self._n(name)))
     def bf_lbl(self,name):
-        idx=len(self.words); self._emit(0x8B00); self.fixups8.append((idx,name))
+        idx=len(self.words); self._emit(0x8B00); self.fixups8.append((idx,self._n(name)))
     def movl_pool(self,value,rn):
         # mov.l @(disp,PC),Rn ; disp risolto a fine verso la pool (l'ultima pool_here() successiva, o quella finale)
         # value puo' essere il NOME di una label: il literal sara' il suo indirizzo
         idx=len(self.words); self._emit(0xD000|(rn<<8))  # disp placeholder
-        self.pool_refs.append((idx,value,rn))
+        self.pool_refs.append((idx,self._n(value),rn))
     def pool_here(self):
         """Emette QUI una literal pool con le costanti referenziate finora (non ancora risolte). Va chiamata
         subito dopo un salto incondizionato (bra/rts): i literal non devono essere eseguiti. Permette codice > 1KB."""
@@ -87,6 +96,8 @@ class SHAsm:
     def rotcl(self,rn): self._emit(0x4024|(rn<<8))                 # rotcl Rn (T<-MSB, LSB<-T)
     def mul_l(self,rm,rn): self._emit(0x0007|(rn<<8)|(rm<<4))       # mul.l Rm,Rn -> MACL
     def sts_macl(self,rn): self._emit(0x001A|(rn<<8))              # sts macl,Rn
+    def dmulu_l(self,rm,rn): self._emit(0x3005|(rn<<8)|(rm<<4))     # dmulu.l Rm,Rn -> MACH:MACL (64 bit senza segno)
+    def sts_mach(self,rn): self._emit(0x000A|(rn<<8))              # sts mach,Rn
     def lds_pr(self,rm): self._emit(0x402A|(rm<<8))                # lds Rm,PR
     def stc_sr(self,rn): self._emit(0x0002|(rn<<8))                # stc SR,Rn
     def ldc_sr(self,rm): self._emit(0x400E|(rm<<8))                # ldc Rm,SR
@@ -110,9 +121,9 @@ class SHAsm:
     def shad(self,rm,rn): self._emit(0x400C|(rn<<8)|(rm<<4))     # shad Rm,Rn (Rm>=0: Rn<<=Rm, Rm<0: Rn>>=-Rm aritmetico)
     def shar(self,rn): self._emit(0x4021|(rn<<8))                # shar Rn
     def bra_lbl(self,name):
-        idx=len(self.words); self._emit(0xA000); self.fixups12.append((idx,'bra',name))
+        idx=len(self.words); self._emit(0xA000); self.fixups12.append((idx,'bra',self._n(name)))
     def bsr_lbl(self,name):
-        idx=len(self.words); self._emit(0xB000); self.fixups12.append((idx,'bsr',name))
+        idx=len(self.words); self._emit(0xB000); self.fixups12.append((idx,'bsr',self._n(name)))
     def cmp_imm(self,imm): self._emit(0x8800|(imm&0xff))          # cmp/eq #imm,r0
     def cmp_hs_imm_via(self):
         pass
