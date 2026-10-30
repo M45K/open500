@@ -1,0 +1,77 @@
+name: Submit a tool
+description: Share an add-on you made, so it can be listed on the Open500 website.
+title: "Tool: "
+labels: ["tool-submission"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing! Paste the **source** of your tool (the `.py` file), not the WAV: the WAV is built from
+        your source on GitHub after the maintainer approves it, so everyone downloads exactly what they can read.
+        Made it with Claude Code? Ask it to "prepare the Open500 submission" and paste what it gives you.
+  - type: input
+    id: name
+    attributes:
+      label: Tool name
+      description: As it appears in MODE -> OTHER (up to 16 characters).
+      placeholder: Chord Pads
+    validations:
+      required: true
+  - type: input
+    id: wav
+    attributes:
+      label: WAV file name
+      description: Up to 8 capital letters or digits, without .WAV. Must not be used by another tool.
+      placeholder: CHORDPAD
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What it does
+      description: One or two sentences for musicians.
+    validations:
+      required: true
+  - type: textarea
+    id: how_to_use
+    attributes:
+      label: How to use
+      description: One step per line (which page, which buttons, what you see).
+    validations:
+      required: true
+  - type: textarea
+    id: lcd
+    attributes:
+      label: Display (optional)
+      description: The two 16-character rows of your page.
+      render: text
+  - type: input
+    id: video
+    attributes:
+      label: Video (optional)
+      description: An https link to a short video of the tool on the MPC.
+  - type: textarea
+    id: source
+    attributes:
+      label: Source (.py)
+      description: The whole .py file (it must define `pg = PageAddon(...)`, like sdk/examples/hello_page.py).
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: test
+    attributes:
+      label: Emulator test output
+      description: What `python3 your_tool.py` printed (the emulator test from the SDK).
+      render: text
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I publish this tool under the GPL-3.0 license, like Open500.
+          required: true
+        - label: I tested it on my MPC500.
+          required: false

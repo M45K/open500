@@ -18,7 +18,7 @@ pg.label("HELLO OPEN500", 0, 0)               # static text at column 0, row 0
 TIMES = pg.value("Times:", 0, 1, fmt=" 0", lo=1, hi=9, default=3)   # editable number: the OS handles cursor and wheel
 pg.message()                                  # enables the ~2 s message line (row 0)
 SAID = pg.alloc_slot()                        # a 32-bit variable in your add-on's private RAM ("scratch")
-view = View(23, ver=1)                        # views 10-23 are free for new add-ons (see docs/PROTOCOL.md)
+view = View(23, ver=1)                        # views 12-23 are free for new add-ons (see docs/PROTOCOL.md)
 
 def fire(m):
     """runs ~300 times per second while the page is open. Keep it short. r0-r14 are free here."""

@@ -1,0 +1,83 @@
+# A tool submitted with the "Submit a tool" form becomes a pull request when the repository owner adds the label
+# "approved". Job 1 runs the submitted code (it builds the WAV) with no write permission and no secrets.
+# Job 2 has write permission but never runs submitted code: it re-reads the source from the issue (data only),
+# takes only the built WAV from job 1, checks it as data, regenerates the catalog and opens the pull request.
+name: Community tool from an approved submission
+on:
+  issues:
+    types: [labeled]
+permissions: {}
+jobs:
+  build:
+    if: >-
+      github.event.label.name == 'approved' &&
+      contains(github.event.issue.labels.*.name, 'tool-submission') &&
+      github.event.sender.login == github.repository_owner
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      id: ${{ steps.src.outputs.id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - id: src
+        name: Source from the issue
+        run: echo "id=$(python3 tools/community.py from-issue "$GITHUB_EVENT_PATH")" >> "$GITHUB_OUTPUT"
+      - name: Build the WAV from the source and check it (no firmware, no secrets)
+        run: python3 tools/community.py build "${{ steps.src.outputs.id }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wav
+          path: docs/community/${{ steps.src.outputs.id }}/
+          if-no-files-found: error
+  pr:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Source from the issue (data only)
+        id: src
+        run: echo "id=$(python3 tools/community.py from-issue "$GITHUB_EVENT_PATH")" >> "$GITHUB_OUTPUT"
+      - name: Check the id
+        run: test "${{ steps.src.outputs.id }}" = "${{ needs.build.outputs.id }}"
+      - uses: actions/download-artifact@v4
+        with:
+          name: wav
+          path: wav-from-build
+      - name: Take only the WAV, check it as data, update the catalog
+        env:
+          ID: ${{ steps.src.outputs.id }}
+        run: |
+          WAV=$(python3 -c "import json; print(json.load(open('community/$ID/tool.json'))['wav'])")
+          mkdir -p "docs/community/$ID"
+          cp "wav-from-build/$WAV" "docs/community/$ID/$WAV"
+          rm -rf wav-from-build
+          python3 tools/community.py check-wav "$ID"
+          python3 tools/community.py catalog
+      - name: Open the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ID: ${{ steps.src.outputs.id }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "community/$ID-$ISSUE"
+          git add "community/$ID" "docs/community"
+          git commit -m "Community tool: $ID (from #$ISSUE)"
+          git push origin "community/$ID-$ISSUE"
+          gh pr create --base main --head "community/$ID-$ISSUE" --title "Community tool: $ID" \
+            --body "Built on GitHub from the source in #$ISSUE. Merge to publish it on the website. Closes #$ISSUE."
+          gh issue comment "$ISSUE" --body "Thanks! Your tool was built from the source above and a pull request is open: it goes on the website when it is merged."

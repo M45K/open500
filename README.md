@@ -50,14 +50,25 @@ describe the tool you want ("a page that tunes the 12 pads to a chord"), and Cla
 with the SDK, tests it in the emulator and gives you the WAV plus a checklist for the MPC. To use the skill in other
 folders, copy `.claude/skills/open500-addon` to `~/.claude/skills/`. Without Claude: start from `sdk/README.md`.
 
+## Share your tool
+Open an issue with the **[Submit a tool](https://github.com/M45K/open500/issues/new?template=submit-tool.yml)** form and
+paste your `.py` (or open a pull request, see `community/README.md`). When the maintainer approves it, GitHub builds
+the WAV from your source, checks it and opens a pull request; once merged it appears in *Community tools* on the website.
+
 ## Repository layout
 - `docs/` — website, browser patcher (`patcher.js`), patch data (`patch.js`), add-on WAVs (`docs/addons/`), screen
   page (`screen.html`, `o5link.js`) and its protocol notes (`PROTOCOL.md`)
 - `sdk/` — add-on SDK (Python → SH-3 code, emulator, testkit) and the source of every official add-on (`sdk/addons/`):
   start from `sdk/README.md`
 - `.claude/skills/open500-addon/` — skill for Claude Code: helps you build and test a tool with the SDK
+- `community/` — tools shared by users (source + `tool.json`); `tools/community.py` builds and checks them
 - `tools/make_patch.py` — builds `docs/patch.js` from the tested firmware and checks the base against the Akai zip
 - `tools/test_patcher.js` — `node tools/test_patcher.js`: original OS 1.31 + patch must equal the hardware-tested
   firmware byte for byte, and wrong files must be refused
+
+## License
+Open500 is free software under the **GNU GPL v3** (`LICENSE`): you can use, change and share it, and what you
+share must stay under the same license. Copyright (C) 2026 M45K and contributors. The Akai firmware is not part of
+this repository.
 
 Unofficial project, not affiliated with Akai Professional or inMusic. Tested on one MPC500 with OS 1.31. Use at your own risk.

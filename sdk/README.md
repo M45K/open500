@@ -156,5 +156,7 @@ Addresses are for OS 1.31 only. More in the official add-ons' source headers.
 the message line, your variables and your view. See the end of `examples/hello_page.py`.
 
 ## Sharing
-Open an issue or a pull request with your add-on source. Add-ons are distributed as WAV files; please include the
-`.py` so others can learn from it.
+Use the **Submit a tool** issue form (paste your `.py`) or a pull request into `community/` (see `community/README.md`).
+The WAV is always built from your source on GitHub after the maintainer approves it, and listed on the website under
+*Community tools*. Your tool's 8-character name and WAV name must be unique (checked automatically). Open500 and the
+tools shared here are under the GPL-3.0.

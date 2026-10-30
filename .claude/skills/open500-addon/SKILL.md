@@ -31,6 +31,12 @@ The SDK is in `sdk/` of the Open500 repository; read `sdk/README.md` and `sdk/ex
 7. **Hand over a hardware checklist**: what to copy to the CF card, what to press, what they should see/hear, what to
    do if something goes wrong (SHIFT+ERASE reloads the HUB; power-cycle; the original OS can always be reflashed).
    Be explicit that emulator-tested is not hardware-tested.
+8. **Sharing** (when the user asks, e.g. "prepare the Open500 submission"): check the 8-character `PageAddon` name and
+   the WAV name are not used by an official tool (`docs/addons`) or a community tool (`docs/community/catalog.json`),
+   then either fill in the **Submit a tool** issue form for them (tool name, WAV file name, what it does, how to use one
+   step per line, the two display rows, video link, the whole `.py`, the emulator test output, and ask whether they
+   tried it on their MPC) or, if they use git, add `community/<id>/tool.py` + `tool.json`, run
+   `python3 tools/community.py build <id>` and open a pull request. Shared tools are GPL-3.0; never include firmware.
 
 ## Hard rules
 - **Never put Akai firmware in the repository or in messages.** The emulator uses the user's own patched

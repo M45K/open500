@@ -66,7 +66,7 @@
     <h1 class="logo">Open<span>500</span></h1>
     <p class="tag">New native pages for the Akai MPC500, loaded from a WAV file.<br>No hardware mod, no soldering, fully reversible.</p>
     <p><span class="pill">MPC500 OS 1.31</span><span class="pill">free</span><span class="pill">open source</span></p>
-    <p><a class="btn" href="#install">Install</a> &nbsp; <a class="btn ghost" href="#new">New in 0.2</a> &nbsp; <a class="btn ghost" href="#addons">See the add-ons</a> &nbsp; <a class="btn ghost" href="#make">Make your own</a> &nbsp;
+    <p><a class="btn" href="#install">Install</a> &nbsp; <a class="btn ghost" href="#new">New in 0.2</a> &nbsp; <a class="btn ghost" href="#addons">See the add-ons</a> &nbsp; <a class="btn ghost" href="#make">Make your own</a> &nbsp; <a class="btn ghost" href="#community">Community</a> &nbsp;
       <a class="btn donate" href="https://paypal.me/SupportOpen500" target="_blank" rel="noopener">&hearts; Support Open500</a></p>
     <div class="media"><iframe src="https://www.youtube-nocookie.com/embed/ETZ7N6kh8hg" title="Open500 on the Akai MPC500"
       style="width:100%;height:100%;border:0;border-radius:12px" loading="lazy"
@@ -385,10 +385,20 @@ to a minor chord."</div>
     </ol>
     <div class="note">Tested in the emulator is not the same as tested on the MPC: try new tools with your work saved.
       If something goes wrong, <kbd>SHIFT</kbd>+<kbd>ERASE</kbd> reloads the add-on manager, switching off clears all
-      add-ons, and the original OS can always be flashed back. Made something nice? Share the <code>.py</code> in an
-      <a href="https://github.com/M45K/open500/issues">issue</a> so others can use it. To use the skill outside the
+      add-ons, and the original OS can always be flashed back. Made something nice? <a href="https://github.com/M45K/open500/issues/new?template=submit-tool.yml">Submit it</a>
+      (or ask Claude to "prepare the Open500 submission"): once approved it appears in <a href="#community">Community tools</a>. To use the skill outside the
       repository, copy <code>.claude/skills/open500-addon</code> to <code>~/.claude/skills/</code>. Prefer to write the
       code yourself? Start from <a href="https://github.com/M45K/open500/tree/main/sdk"><code>sdk/README.md</code></a>.</div>
+  </div>
+</section>
+
+<section id="community">
+  <div class="wrap">
+    <h2>Community tools</h2>
+    <p class="muted">Tools made by Open500 users, built on GitHub from their source code. <b>Not tested by Open500</b>:
+      try them with your work saved. Made one? <a href="https://github.com/M45K/open500/issues/new?template=submit-tool.yml">Submit it</a>
+      (see <a href="#make">Make your own tool</a>).</p>
+    <div class="grid" id="community-list"><p class="muted">No community tools yet &mdash; be the first!</p></div>
   </div>
 </section>
 
@@ -412,7 +422,8 @@ to a minor chord."</div>
 <footer>
   <div class="wrap">
     <p><a href="https://github.com/M45K/open500">GitHub</a> &middot; <a href="https://paypal.me/SupportOpen500" target="_blank" rel="noopener">&hearts; Support Open500 (PayPal)</a></p>
-    Open500 — an independent project for the Akai MPC500. Akai Professional and MPC are trademarks of inMusic Brands.
+    Open500 — an independent project for the Akai MPC500, free software under the <a href="https://github.com/M45K/open500/blob/main/LICENSE">GNU GPL v3</a>.
+    Akai Professional and MPC are trademarks of inMusic Brands.
   </div>
 </footer>
 
@@ -450,6 +461,37 @@ to a minor chord."</div>
     a.href = URL.createObjectURL(new Blob([result], { type: 'application/octet-stream' }));
     a.download = 'MPC500.bin'; document.body.appendChild(a); a.click(); a.remove();
   });
+})();
+</script>
+<script>
+(function () {                      // community tools: docs/community/catalog.json (text only, never HTML from the catalog)
+  var box = document.getElementById('community-list');
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  fetch('community/catalog.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (cat) {
+    if (!cat || !cat.tools || !cat.tools.length) return;
+    box.innerHTML = '';
+    cat.tools.forEach(function (t) {
+      var c = el('div', 'card');
+      c.appendChild(el('div', 'status soon', t.hardware_tested ? 'community \u00b7 tested on an MPC' : 'community'));
+      c.appendChild(el('h3', null, t.name));
+      c.appendChild(el('p', null, t.description));
+      if (t.lcd && t.lcd.length) c.appendChild(el('div', 'lcd', t.lcd.map(function (r) { return (r + '                ').slice(0, 16); }).join('\n')));
+      if (t.how_to_use && t.how_to_use.length) {
+        var d = el('details'); d.appendChild(el('summary', null, 'How to use')); var ol = el('ol');
+        t.how_to_use.forEach(function (x) { ol.appendChild(el('li', null, x)); }); d.appendChild(ol); c.appendChild(d);
+      }
+      var by = el('p', 'muted', 'by '); var a = el('a', null, t.author);
+      a.href = 'https://github.com/' + encodeURIComponent(t.author); by.appendChild(a);
+      var src = el('a', null, 'source'); src.href = 'https://github.com/M45K/open500/blob/main/' + t.source;
+      by.appendChild(document.createTextNode(' \u00b7 ')); by.appendChild(src);
+      if (/^https:\/\//.test(t.video || '')) { var v = el('a', null, 'video'); v.href = t.video; v.rel = 'noopener nofollow'; v.target = '_blank';
+        by.appendChild(document.createTextNode(' \u00b7 ')); by.appendChild(v); }
+      c.appendChild(by);
+      var dl = el('a', 'btn', 'Download ' + t.wav); dl.href = t.download; dl.setAttribute('download', '');
+      var pd = el('p'); pd.appendChild(dl); c.appendChild(pd);
+      box.appendChild(c);
+    });
+  }).catch(function () {});
 })();
 </script>
 </body>
