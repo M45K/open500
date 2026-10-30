@@ -53,6 +53,9 @@
   .note { border-left: 3px solid var(--warn); background: var(--panel); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 18px 0; }
   details { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; margin-bottom: 10px; }
   summary { cursor: pointer; font-weight: 700; }
+  .card details { background: var(--panel2); font-size: 15px; padding: 10px 14px; }
+  .card details ol { padding-left: 20px; margin: 8px 0 0; }
+  .card details li { margin-bottom: 6px; }
   footer { padding: 34px 0 60px; color: var(--muted); font-size: 14px; }
 </style>
 </head>
@@ -63,7 +66,7 @@
     <h1 class="logo">Open<span>500</span></h1>
     <p class="tag">New native pages for the Akai MPC500, loaded from a WAV file.<br>No hardware mod, no soldering, fully reversible.</p>
     <p><span class="pill">MPC500 OS 1.31</span><span class="pill">free</span><span class="pill">open source</span></p>
-    <p><a class="btn" href="#install">Install</a> &nbsp; <a class="btn ghost" href="#new">New in 0.2</a> &nbsp; <a class="btn ghost" href="#addons">See the add-ons</a> &nbsp;
+    <p><a class="btn" href="#install">Install</a> &nbsp; <a class="btn ghost" href="#new">New in 0.2</a> &nbsp; <a class="btn ghost" href="#addons">See the add-ons</a> &nbsp; <a class="btn ghost" href="#make">Make your own</a> &nbsp;
       <a class="btn donate" href="https://paypal.me/SupportOpen500" target="_blank" rel="noopener">&hearts; Support Open500</a></p>
     <div class="media"><iframe src="https://www.youtube-nocookie.com/embed/ETZ7N6kh8hg" title="Open500 on the Akai MPC500"
       style="width:100%;height:100%;border:0;border-radius:12px" loading="lazy"
@@ -95,7 +98,7 @@
       <li>New tools: <b>Scale Pads</b>, <b>Pad Mute/Solo</b>, <b>Seq Tools</b> (double / half).</li>
       <li><b>USB MIDI</b> (beta) and the <b>screen in your browser</b> (beta).</li>
       <li><kbd>CANCEL</kbd> goes back one step in every tool.</li>
-      <li><b>Tool sources</b> and a <b>Claude skill</b> for making your own tools (<a href="https://github.com/M45K/open500/tree/main/sdk">SDK</a>).</li>
+      <li><b>Tool sources</b> and a <b>Claude skill</b> for making your own tools (<a href="#make">how</a>, <a href="https://github.com/M45K/open500/tree/main/sdk">SDK</a>).</li>
     </ul>
     <div class="note"><b>Updating from the previous version:</b> no new firmware needed. Replace <code>HUB.WAV</code> and the
       add-ons on your card with the new files. <code>CHOPAGE.WAV</code>, <code>TRANSCHP.WAV</code> and <code>AUTOWARP.WAV</code>
@@ -120,6 +123,14 @@ Mode: Tap       </div>
           <b>Tap</b>: play the sample and hit the pads in time &mdash; every pad gets the slice from where you hit it, snapped to the
           nearest attack. <b>Warp</b>: put a loop in time with your sequence with the MPC's own time stretch.
           Slices are set to mono, all in one mute group.</p>
+        <details><summary>How to use</summary><ol>
+<li><kbd>MODE</kbd> &rarr; <kbd>OTHER</kbd> &rarr; <i>Chop Shop</i>, <kbd>DO IT</kbd>. Turn the wheel to pick the mode, <kbd>DO IT</kbd> opens it, <kbd>CANCEL</kbd> goes back to the menu.</li>
+<li>In every mode the top line is the sample: turn the wheel to pick it. Slices go on the pads of the current program; the original sample is not changed.</li>
+<li><b>BPM:</b> set <b>B</b> (tempo) and <b>N</b> (slices). Pads 1&ndash;12 play slices 1&ndash;12. <kbd>DO IT</kbd>, then hit the pad for slice 1 (or <kbd>DO IT</kbd> again to start from pad <b>P</b>).</li>
+<li><b>Transient:</b> turn <b>SENS</b> until <b>N</b> shows the slices you want, listen on the pads. <kbd>DO IT</kbd>, hit the first pad (or <kbd>DO IT</kbd> again: from <b>P</b>).</li>
+<li><b>Tap:</b> <kbd>DO IT</kbd> (<i>Tap pads to chop</i>). Hit a pad: the sample starts and slice 1 goes on that pad. While it plays, hit a pad at every cut: the slice from there goes on the pad you hit. At the end (or <kbd>DO IT</kbd>): <i>Keep? DO IT=yes</i>, the pads play their slices. <kbd>DO IT</kbd> keeps them (<i>Slicing 03/12</i> &hellip; <i>Done</i>), <kbd>CANCEL</kbd> drops the take. <b>SNAP On</b> moves each cut to the nearest attack.</li>
+<li><b>Warp:</b> <b>B</b> = bars of the loop (guessed), <b>T</b> = target tempo (your sequence), then RTHM / PERC / MUSC / VOX. The pads play the result. <kbd>DO IT</kbd>, <kbd>DO IT</kbd> again saves it as a new sample.</li>
+</ol></details>
         <p><a class="btn" href="addons/CHOPSHOP.WAV" download>Download CHOPSHOP.WAV</a></p>
       </div>
       <div class="card">
@@ -141,6 +152,12 @@ A01 B 1 S 5 V100</div>
         <p class="muted">Move along the steps with the arrow keys and <b>hit a pad</b> to add or remove its hit at the cursor, with the
           velocity you hit it with (several pads on the same step). While the sequence plays, a playhead runs on the bar you see.
           <kbd>QLINK</kbd> and <kbd>DO IT</kbd> still work. <kbd>&darr;</kbd> goes to bar / step / velocity, <kbd>&uarr;</kbd> back to the grid.</p>
+        <details><summary>How to use</summary><ol>
+<li><kbd>MODE</kbd> &rarr; <kbd>OTHER</kbd> &rarr; <i>Grid Seq</i>. The top line is one bar: a block = hit, <code>:</code> = start of a beat, <code>.</code> = empty.</li>
+<li>Arrow keys move the cursor on the steps. <b>Hit a pad</b>: its hit goes on the cursor, with that velocity. Hit it again to remove it. The line shows the last pad you hit.</li>
+<li><kbd>&darr;</kbd> to change bar / step / velocity, <kbd>&uarr;</kbd> back to the grid. <kbd>QLINK</kbd> and <kbd>DO IT</kbd> also add or remove the hit of the shown pad.</li>
+<li>Press <kbd>PLAY</kbd>: a <code>&gt;</code> runs on the steps of the bar you are looking at.</li>
+</ol></details>
         <p><a class="btn" href="addons/GRID.WAV" download>Download GRID.WAV</a></p>
       </div>
       <div class="card">
@@ -162,6 +179,13 @@ COPY  PAD       </div>
         <p class="muted"><b>SWAP</b> two pads (optionally with their MIDI notes, so your sequences keep playing the same sounds),
           <b>COPY</b> one pad to as many pads as you hit, <b>CLEAR</b> pads back to default. On a full pad it asks first:
           hit it again (or <kbd>DO IT</kbd>) to overwrite, hit another pad to skip it. Shortcut: <kbd>SHIFT</kbd>+<kbd>STOP</kbd>.</p>
+        <details><summary>How to use</summary><ol>
+<li><kbd>SHIFT</kbd>+<kbd>STOP</kbd> (or <kbd>MODE</kbd> &rarr; <kbd>OTHER</kbd> &rarr; <i>Pad Tools</i>). Pick <b>SWAP / COPY / CLEAR</b> and <b>SAMPLE / PAD / PAD+NOTE</b>.</li>
+<li><b>SWAP:</b> <kbd>DO IT</kbd>, hit the first pad, hit the second pad.</li>
+<li><b>COPY:</b> <kbd>DO IT</kbd>, hit the source pad, then every pad you want to copy it to. On a full pad it asks <i>C05 full DOIT=ok</i>: hit it again (or <kbd>DO IT</kbd>) to overwrite, or hit another pad to skip it. <kbd>DO IT</kbd> when you are done.</li>
+<li><b>CLEAR:</b> <kbd>DO IT</kbd>, hit the pads to clear, <kbd>DO IT</kbd>, <kbd>DO IT</kbd> again to confirm.</li>
+<li><kbd>CANCEL</kbd> goes back one step. MIDI notes are only swapped (PAD+NOTE), never copied.</li>
+</ol></details>
         <p><a class="btn" href="addons/PADTOOLS.WAV" download>Download PADTOOLS.WAV</a></p>
       </div>
       <div class="card">
@@ -172,6 +196,11 @@ COPY  PAD       </div>
 MINOR   C  &gt;B   </div>
         <p class="muted">Pick the scale (major, minor, modes, pentatonic, blues&hellip;), the key and the target bank. <kbd>DO IT</kbd>,
           hit the source pad, confirm: pad 1 is the root, then the scale goes up. MIDI notes are not changed.</p>
+        <details><summary>How to use</summary><ol>
+<li><kbd>MODE</kbd> &rarr; <kbd>OTHER</kbd> &rarr; <i>Scale Pads</i>. Pick the scale, the key and the target bank (<code>&gt;B</code>).</li>
+<li><kbd>DO IT</kbd>, hit the pad with the sound you want, then <kbd>DO IT</kbd> to confirm (<i>A01&gt;bank B DOIT?</i>).</li>
+<li>The 12 pads of that bank get the sound, tuned to the scale: pad 1 = root, then up the scale. <kbd>CANCEL</kbd> stops.</li>
+</ol></details>
         <p><a class="btn" href="addons/SCALEPAD.WAV" download>Download SCALEPAD.WAV</a></p>
       </div>
       <div class="card">
@@ -183,6 +212,12 @@ M.S.-....... MUT</div>
         <p class="muted">Hit a pad to mute it (or solo it in <b>SOL</b> mode). <kbd>DO IT</kbd> brings all pads back. Mutes stay
           on when you leave the page. Shortcut: <kbd>SHIFT</kbd>+<kbd>TRACK MUTE</kbd>. Note: saving the program while pads are
           muted saves them at level 0.</p>
+        <details><summary>How to use</summary><ol>
+<li><kbd>SHIFT</kbd>+<kbd>TRACK MUTE</kbd> (or <kbd>MODE</kbd> &rarr; <kbd>OTHER</kbd> &rarr; <i>Pad Mute</i>).</li>
+<li>The bottom line shows the 12 pads of the bank: <code>M</code> muted, <code>S</code> solo, <code>-</code> silenced by a solo, <code>.</code> playing. <kbd>BANK</kbd> A&ndash;D changes bank.</li>
+<li>Hit a pad to mute or unmute it. Turn <b>MUT</b> to <b>SOL</b> to solo pads instead.</li>
+<li><kbd>DO IT</kbd> brings all pads back. Mutes stay on when you leave the page: unmute before saving the program.</li>
+</ol></details>
         <p><a class="btn" href="addons/PADMUTE.WAV" download>Download PADMUTE.WAV</a></p>
       </div>
       <div class="card">
@@ -193,6 +228,10 @@ M.S.-....... MUT</div>
 DOUBLE x2       </div>
         <p class="muted"><b>DOUBLE</b> makes the sequence twice as long and copies its bars after the end (all tracks): 2 &rarr; 4 &rarr; 8 bars.
           <b>HALF</b> keeps the first half.</p>
+        <details><summary>How to use</summary><ol>
+<li><kbd>MODE</kbd> &rarr; <kbd>OTHER</kbd> &rarr; <i>Seq Tools</i>. The top line shows the bars of the current sequence.</li>
+<li>Pick <b>DOUBLE x2</b> or <b>HALF /2</b> with the wheel, press <kbd>DO IT</kbd>.</li>
+</ol></details>
         <p><a class="btn" href="addons/SEQTOOLS.WAV" download>Download SEQTOOLS.WAV</a></p>
       </div>
       <div class="card">
@@ -210,6 +249,12 @@ LEVEL +0.0dB    </div>
         <p>The MPC's USB port becomes a MIDI interface: plug it into your computer, no drivers.</p>
         <p class="muted">Pads and sequences go to your DAW as <i>MPC500 MIDI</i>, like the 5-pin MIDI OUT. Turn it on in its page.
           With MIDI Screen it also carries the screen.</p>
+        <details><summary>How to use</summary><ol>
+<li><kbd>MODE</kbd> &rarr; <kbd>OTHER</kbd> &rarr; <i>USB MIDI</i>, turn it <b>ON</b> with the wheel. Connect the MPC's USB port to your computer.</li>
+<li>Your computer sees a MIDI device called <i>MPC500 MIDI</i> (no driver). Pick it as input in your DAW.</li>
+<li>It sends what the 5-pin MIDI OUT sends: if nothing arrives, check the MPC's own MIDI settings (track MIDI channel, Soft thru).</li>
+<li>Turn it <b>OFF</b> to give the USB port back to the MPC.</li>
+</ol></details>
         <p><a class="btn" href="addons/USBMIDI.WAV" download>Download USBMIDI.WAV</a></p>
       </div>
       <div class="card">
@@ -218,6 +263,12 @@ LEVEL +0.0dB    </div>
         <p>The MPC's display, waveform, slices, pads and mixer on a big screen, in your browser.</p>
         <p class="muted">Load <code>MIDISCR.WAV</code> (and <code>USBMIDI.WAV</code> for the USB cable), turn them on, then open the
           <a href="screen.html">screen page</a> in Chrome and press <i>Connect</i> (allow MIDI). Works over USB or a MIDI interface.</p>
+        <details><summary>How to use</summary><ol>
+<li>Load <code>MIDISCR.WAV</code> (it starts <b>ON</b>; its page is <kbd>MODE</kbd> &rarr; <kbd>OTHER</kbd> &rarr; <i>MIDI Screen</i>). For the USB cable also load <code>USBMIDI.WAV</code> and turn it ON.</li>
+<li>Connect the MPC to the computer: USB cable, or the MPC's MIDI ports to a MIDI interface.</li>
+<li>Open the <a href="screen.html">screen page</a> in Chrome, press <i>Connect</i> and allow MIDI (SysEx).</li>
+<li>You see the MPC's display, the waveform of the current sample with its slices, the pads and the mixer.</li>
+</ol></details>
         <p><a class="btn" href="addons/MIDISCR.WAV" download>Download MIDISCR.WAV</a></p>
       </div>
       <div class="card">
@@ -226,6 +277,11 @@ LEVEL +0.0dB    </div>
         <p>The add-on manager. Load it first: it installs every add-on you load after it (up to 16 at the same time) and adds them to the <kbd>OTHER</kbd> menu.</p>
         <p class="muted">At power on it shows the <b>OPEN 500</b> splash. If a tool ever breaks, it tells you at the next start
           (<code>MEM ERR</code> / <code>CRASH:</code> with the tool name).</p>
+        <details><summary>How to use</summary><ol>
+<li><kbd>LOAD</kbd> <code>HUB.WAV</code> first, then the tools (or put them all in the autoload folder). The first time after power on you see the <b>OPEN 500</b> splash.</li>
+<li>The tools appear in <kbd>MODE</kbd> &rarr; <kbd>OTHER</kbd>, after <i>Version</i>.</li>
+<li>A tool doesn't show up? <kbd>SHIFT</kbd>+<kbd>ERASE</kbd> reloads the add-on manager.</li>
+</ol></details>
         <p><a class="btn" href="addons/HUB.WAV" download>Download HUB.WAV</a></p>
       </div>
     </div>
@@ -289,6 +345,53 @@ LEVEL +0.0dB    </div>
   </div>
 </section>
 
+<section id="make">
+  <div class="wrap">
+    <h2>Make your own tool (with Claude)</h2>
+    <p>You don't need to be a programmer. The Open500 repository includes a <b>skill for Claude Code</b>: it knows the
+      add-on SDK, the official tools and the MPC500's memory, so you can describe the tool you want in plain words and
+      Claude builds it, tests it in an emulator of the MPC and gives you the WAV.</p>
+    <ol class="steps">
+      <li>
+        <h3>Get Claude Code</h3>
+        <p>Install <a href="https://claude.com/claude-code" target="_blank" rel="noopener">Claude Code</a> (terminal or desktop app)
+          and sign in with your Claude account. You also need Python 3 on your computer (macOS already has it).</p>
+      </li>
+      <li>
+        <h3>Download the Open500 repository</h3>
+        <p>On <a href="https://github.com/M45K/open500">GitHub</a>: <i>Code</i> &rarr; <i>Download ZIP</i> (and unzip it), or
+          <code>git clone https://github.com/M45K/open500.git</code>.</p>
+      </li>
+      <li>
+        <h3>Add your firmware</h3>
+        <p>Make your <code>MPC500.bin</code> with the installer above (the same file you flash) and put a copy in the
+          <code>open500</code> folder. The emulator runs it to test your tool. It stays on your computer: never share it.</p>
+      </li>
+      <li>
+        <h3>Open the folder in Claude Code and describe your tool</h3>
+        <p>Open the <code>open500</code> folder in Claude Code: the <b>open500-addon</b> skill loads by itself. Then just say
+          what you want, for example:</p>
+        <div class="lcd">"Make a page that tunes
+the 12 pads of bank B
+to a minor chord."</div>
+        <p class="muted">Claude first shows you how the page will look on the 16&times;2 display and what each button does,
+          then writes the tool, runs its emulator test and fixes it until it passes.</p>
+      </li>
+      <li>
+        <h3>Try it on the MPC</h3>
+        <p>Copy the new WAV to the card next to <code>HUB.WAV</code> and <kbd>LOAD</kbd> it like the other add-ons. Claude gives
+          you a short checklist of what to press and what you should see and hear.</p>
+      </li>
+    </ol>
+    <div class="note">Tested in the emulator is not the same as tested on the MPC: try new tools with your work saved.
+      If something goes wrong, <kbd>SHIFT</kbd>+<kbd>ERASE</kbd> reloads the add-on manager, switching off clears all
+      add-ons, and the original OS can always be flashed back. Made something nice? Share the <code>.py</code> in an
+      <a href="https://github.com/M45K/open500/issues">issue</a> so others can use it. To use the skill outside the
+      repository, copy <code>.claude/skills/open500-addon</code> to <code>~/.claude/skills/</code>. Prefer to write the
+      code yourself? Start from <a href="https://github.com/M45K/open500/tree/main/sdk"><code>sdk/README.md</code></a>.</div>
+  </div>
+</section>
+
 <section id="faq">
   <div class="wrap">
     <h2>FAQ</h2>
@@ -297,7 +400,7 @@ LEVEL +0.0dB    </div>
     <details><summary>Why do I have to provide the OS file myself?</summary><p>Because the operating system belongs to Akai. Open500 only publishes its own code, and your browser combines the two on your computer.</p></details>
     <details><summary>Can I write my own add-on?</summary><p>Yes, that is the idea. The <a href="https://github.com/M45K/open500/tree/main/sdk">add-on SDK</a> is in the repository:
       Python, an emulator to test your add-on before trying it on the MPC, and the source of every official add-on. There is also a
-      skill for Claude Code that knows the SDK and helps you build a tool even if you don't code: open the repository folder in Claude Code and describe the tool you want.</p></details>
+      skill for Claude Code that knows the SDK and helps you build a tool even if you don't code: see <a href="#make">Make your own tool</a>.</p></details>
     <details><summary>Which browsers work with the screen page?</summary><p>Chrome (and other Chromium browsers with Web MIDI) on Mac, PC and Android.
       It is a beta: tell us in an issue how it goes on your setup.</p></details>
     <details><summary>I have an idea for an add-on</summary><p>Great — open an issue in the repository and describe it.</p></details>
