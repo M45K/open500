@@ -155,7 +155,7 @@ Addresses are for OS 1.31 only. More in the official add-ons' source headers.
 `testkit.PageTest` loads firmware + HUB + your WAV and lets you open the page, press DO IT/CANCEL, hit pads, read
 the message line, your variables and your view. See the end of `examples/hello_page.py`.
 
-## Sharing
+## Sharing (beta)
 Use the **Submit a tool** issue form (paste your `.py`) or a pull request into `community/` (see `community/README.md`).
 The WAV is always built from your source on GitHub after the maintainer approves it, and listed on the website under
 *Community tools*. Your tool's 8-character name and WAV name must be unique (checked automatically). Open500 and the

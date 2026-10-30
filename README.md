@@ -50,7 +50,7 @@ describe the tool you want ("a page that tunes the 12 pads to a chord"), and Cla
 with the SDK, tests it in the emulator and gives you the WAV plus a checklist for the MPC. To use the skill in other
 folders, copy `.claude/skills/open500-addon` to `~/.claude/skills/`. Without Claude: start from `sdk/README.md`.
 
-## Share your tool
+## Share your tool (beta)
 Open an issue with the **[Submit a tool](https://github.com/M45K/open500/issues/new?template=submit-tool.yml)** form and
 paste your `.py` (or open a pull request, see `community/README.md`). When the maintainer approves it, GitHub builds
 the WAV from your source, checks it and opens a pull request; once merged it appears in *Community tools* on the website.

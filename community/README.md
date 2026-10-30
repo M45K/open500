@@ -1,7 +1,8 @@
-# Community tools
+# Community tools (beta)
 
 Tools made by Open500 users, listed on the website under **Community tools**. They are built from the source in this
-folder; they are **not tested by Open500**: try them with your work saved.
+folder; they are **not tested by Open500**: try them with your work saved. The sharing system is new in 0.2 and
+in beta: if something doesn't work, open an issue.
 
 ## Share your tool
 **Without git (recommended):** open an issue with the [Submit a tool](https://github.com/M45K/open500/issues/new?template=submit-tool.yml)
