@@ -1,0 +1,20 @@
+{
+ "name": "Note Repeat",
+ "wav": "NOTERPT.WAV",
+ "author": "ShoveD01",
+ "description": "A fuller note repeat: hold a pad and it repeats from 1 bar down to 1/64, plain, triplet or dotted, optionally with a Euclidean or random pattern, and the rate and loudness can follow the velocity or the live pad pressure.",
+ "how_to_use": [
+  "MODE -> OTHER -> Note Repeat",
+  "Row 0: RATE (1/1 to 1/64), the type (- plain, T triplet, . dotted), V: OFF / PRS (velocity of the hit sets the rate) / LIV (live pad pressure sets the rate and the hit velocity)",
+  "Row 1: PAT OFF / EUC (Euclidean) / RND (random), N = steps, H = hits, R = rotate (EUC) or seed (RND)",
+  "Hold a pad: it repeats until you let go; with a sequence running the first hit waits for the next grid line"
+ ],
+ "lcd": [
+  "RPT*1/16 - V:OFF",
+  "EUC N16 H 5 R 0"
+ ],
+ "video": "",
+ "hardware_tested": true,
+ "version": "1",
+ "issue": 23
+}
