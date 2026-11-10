@@ -1,0 +1,22 @@
+{
+ "name": "Resample",
+ "wav": "RESAMPLE.WAV",
+ "author": "ShoveD01",
+ "description": "Records what the MPC is playing (sequence and pads, optionally mixed with the line input) into a new mono or stereo sample and puts it on a pad. Length can be a number of bars from the tempo, or as much as fits in sample memory.",
+ "how_to_use": [
+  "-- How to use ---",
+  "MODE -> OTHER -> Resample",
+  "Set L (length: MAX / 1/4 / 1/2 / 1 / 2 / 4 / 8 bars), the source (OUT = MPC output, MIX = plus the line input; the OS Record page source must be IN for MIX), M (input monitoring - / +) and 1CH / 2CH",
+  "SHIFT + pad starts recording; the sample will go on that pad (current bank)",
+  "SHIFT + any pad stops: the sample is finished, becomes the current sample and is put on the pad (mono voice overlap, mute group 1)",
+  "A fixed length stops by itself. Pads without SHIFT are left to the OS."
+ ],
+ "lcd": [
+  "RESAMPLE  IDLE  ",
+  "LMAX OUT M- 1CH"
+ ],
+ "video": "",
+ "hardware_tested": true,
+ "version": "1",
+ "issue": 21
+}
