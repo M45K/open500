@@ -54,10 +54,15 @@ body:
     id: source
     attributes:
       label: Source (.py)
-      description: The whole .py file (it must define `pg = PageAddon(...)`, like sdk/examples/hello_page.py).
+      description: The whole .py file (it must define `pg = PageAddon(...)`, like sdk/examples/hello_page.py). Too big to paste (about 60,000 characters)? Leave this empty and attach it as a .zip in the next field.
       render: python
     validations:
-      required: true
+      required: false
+  - type: textarea
+    id: source_zip
+    attributes:
+      label: Source as a .zip (optional)
+      description: Only for big tools. Drag here a .zip that contains your single .py file (no other .py files inside).
   - type: textarea
     id: test
     attributes:

@@ -12,7 +12,7 @@ docs/community/<id>/<WAV> + docs/community/catalog.json are generated and served
 Only `build` and `verify` execute submitted code: the GitHub workflows run them in a job without write permissions
 or secrets, and only after the repository owner labels the submission `approved`.
 """
-import sys, os, re, json, struct, hashlib, subprocess, shutil, tempfile
+import sys, os, re, io, json, struct, hashlib, subprocess, shutil, tempfile, zipfile, urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SDK, SRC, OUT = os.path.join(ROOT, 'sdk'), os.path.join(ROOT, 'community'), os.path.join(ROOT, 'docs', 'community')
@@ -21,7 +21,29 @@ sys.path.insert(0, SDK)
 from mpcmod import SLOT_CODE_MAX, ADDON3_HDR
 
 ID_RE, WAV_RE = re.compile(r'^[a-z0-9][a-z0-9-]{1,23}$'), re.compile(r'^[A-Z0-9]{1,8}\.WAV$')
-MAX_SOURCE = 60000
+MAX_SOURCE = 60000                  # pasted in the form (GitHub limits an issue to 65536 characters)
+MAX_ZIP, MAX_ZIP_SOURCE = 1 << 20, 400000
+ZIP_URL = re.compile(r'https://github\.com/user-attachments/files/\d+/[A-Za-z0-9._\-]+\.zip')
+
+
+def fetch(url):
+    """downloads an issue attachment (only github.com/user-attachments, at most MAX_ZIP bytes)"""
+    if not ZIP_URL.fullmatch(url): raise Bad('attachment URL not accepted: %r' % url)
+    with urllib.request.urlopen(url, timeout=30) as r: data = r.read(MAX_ZIP + 1)
+    if len(data) > MAX_ZIP: raise Bad('attached .zip too big (max %d KB)' % (MAX_ZIP >> 10))
+    return data
+
+
+def source_from_zip(text):
+    """the single .py inside the .zip attached in the form field (read in memory, nothing is extracted to disk)"""
+    urls = ZIP_URL.findall(text or '')
+    if len(set(urls)) != 1: raise Bad('attach exactly one .zip (found %d)' % len(set(urls)))
+    z = zipfile.ZipFile(io.BytesIO(fetch(urls[0])))
+    pys = [i for i in z.infolist() if i.filename.endswith('.py') and not i.filename.startswith('__MACOSX/')
+           and not os.path.basename(i.filename).startswith('.')]
+    if len(pys) != 1: raise Bad('the .zip must contain exactly one .py file (found %d)' % len(pys))
+    if pys[0].file_size > MAX_ZIP_SOURCE: raise Bad('source too long (max %d characters)' % MAX_ZIP_SOURCE)
+    return z.read(pys[0]).decode('utf-8')
 
 
 class Bad(Exception): pass
@@ -71,7 +93,7 @@ def check_wav(tid):
     if r is None: raise Bad('%s: unreadable payload' % tid)
     _, _, _, _, _, bad, cats = r
     if bad: raise Bad('%s: %d addresses into the add-on area are not relocated (first at +%#x)' % (tid, len(bad), bad[0][0]))
-    if any(c in cats for c in ('SOTTO LA BASE', 'OLTRE 32K')): raise Bad('%s: relocated addresses outside the add-on' % tid)
+    if any(c in cats for c in ('BELOW THE BASE', 'BEYOND 32K')): raise Bad('%s: relocated addresses outside the add-on' % tid)
     taken = {}
     for f in sorted(os.listdir(OFFICIAL)):
         if f.endswith('.WAV'):
@@ -133,7 +155,7 @@ def catalog():
 
 # ---------------- issue form ----------------
 FIELDS = {'Tool name': 'name', 'WAV file name': 'wav', 'What it does': 'description', 'How to use': 'how_to_use',
-          'Display (optional)': 'lcd', 'Video (optional)': 'video', 'Source (.py)': 'source',
+          'Display (optional)': 'lcd', 'Video (optional)': 'video', 'Source (.py)': 'source', 'Source as a .zip (optional)': 'source_zip',
           'Emulator test output': 'test', 'Checks': 'checks'}
 
 
@@ -164,11 +186,14 @@ def from_issue(event_path):
     if not ID_RE.match(tid): raise Bad('bad tool id %r' % tid)
     if tid in tool_ids(): raise Bad('a community tool called %s already exists' % tid)
     src = unfence(f.get('source', ''))
-    if 'PageAddon' not in src or len(src) > MAX_SOURCE: raise Bad('source missing, not a PageAddon, or too long')
+    if not src.strip() and f.get('source_zip', '').strip(): src = source_from_zip(f['source_zip'])
+    elif len(src) > MAX_SOURCE: raise Bad('source too long to paste: attach it as a .zip')
+    if 'PageAddon' not in src: raise Bad('source missing or not a PageAddon')
     if '[X] I publish this tool under the GPL-3.0' not in f.get('checks', '') and '[x] I publish this tool under the GPL-3.0' not in f.get('checks', ''):
         raise Bad('the GPL-3.0 box is not ticked')
     lcd = [r for r in unfence(f.get('lcd', '')).split('\n') if r.strip()][:2]
     how = [re.sub(r'^\s*(?:[-*]|\d+[.)])\s*', '', r).strip() for r in f.get('how_to_use', '').split('\n') if r.strip()]
+    how = [r for r in how if re.search(r'[A-Za-z0-9]', r) and not re.fullmatch(r'(?i)[\s\-=#*_:]*how to use[\s\-=#*_:]*', r)]   # headings
     m = dict(name=name or tid, wav=wav, author=issue['user']['login'], description=f.get('description', '').strip(),
              how_to_use=how, lcd=[r[:16] for r in lcd], video=f.get('video', '').strip(),
              hardware_tested='[X] I tested it on my MPC500' in f.get('checks', '') or '[x] I tested it on my MPC500' in f.get('checks', ''),

@@ -6,7 +6,8 @@ in beta: if something doesn't work, open an issue.
 
 ## Share your tool
 **Without git (recommended):** open an issue with the [Submit a tool](https://github.com/M45K/open500/issues/new?template=submit-tool.yml)
-form and paste your `.py`. Made it with Claude Code? Ask it to "prepare the Open500 submission".
+form and paste your `.py` (too big to paste, over about 60,000 characters? attach it as a `.zip` with the single `.py`
+inside, in the field below). Made it with Claude Code? Ask it to "prepare the Open500 submission".
 When the maintainer approves it (label `approved`), GitHub builds the WAV from your source, checks it, and opens a
 pull request; when it is merged the tool appears on the website.
 
