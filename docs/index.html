@@ -20,8 +20,9 @@
   a { color: var(--red2); }
   .wrap { max-width: 920px; margin: 0 auto; padding: 0 22px; }
   header { padding: 64px 0 40px; border-bottom: 1px solid var(--line); }
-  .logo { font: 800 56px/1 var(--mono); letter-spacing: -2px; margin: 0; }
-  .logo span { color: var(--red); }
+  .logo { font: 800 56px/1 var(--mono); letter-spacing: -2px; margin: 0; display: flex; align-items: center; gap: 14px; }
+  .logo img { height: 72px; width: 72px; margin-left: -10px; }
+  .logo .lt span { color: var(--red); }
   .tag { font-size: 22px; color: var(--muted); margin: 14px 0 26px; max-width: 640px; }
   .pill { display: inline-block; font: 600 13px var(--mono); padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); margin-right: 6px; }
   .btn { display: inline-block; background: var(--red); color: #fff; text-decoration: none; font-weight: 700; padding: 12px 20px; border-radius: 8px; border: 0; cursor: pointer; font-size: 16px; }
@@ -67,7 +68,7 @@
 
 <header>
   <div class="wrap">
-    <h1 class="logo">Open<span>500</span></h1>
+    <h1 class="logo"><img src="logo.svg" alt=""><span class="lt">Open<span>500</span></span></h1>
     <p class="tag">New native pages for the Akai MPC500, loaded from a WAV file.<br>No hardware mod, no soldering, fully reversible.</p>
     <p><span class="pill">MPC500 OS 1.31</span><span class="pill">free</span><span class="pill">open source</span></p>
     <p><a class="btn" href="#install">Install</a> &nbsp; <a class="btn ghost" href="#new">New in 0.2</a> &nbsp; <a class="btn ghost" href="#addons">See the add-ons</a> &nbsp; <a class="btn ghost" href="#make">Make your own</a> &nbsp; <a class="btn ghost" href="#community">Community (beta)</a> &nbsp;
