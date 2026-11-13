@@ -1,10 +1,13 @@
 # Open500
 
 [![Support Open500](https://img.shields.io/badge/Support-PayPal-0070ba?logo=paypal)](https://paypal.me/SupportOpen500)
+[![Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865f2?logo=discord&logoColor=white)](https://discord.gg/fEpwjsEj8P)
 
 New native pages for the **Akai MPC500**, loaded from a WAV file. No hardware mod, fully reversible.
 
 **Video:** [Open500 0.2](https://youtu.be/llGlZ-LSc9E) · [first video](https://youtu.be/ETZ7N6kh8hg)
+
+**Community:** questions, help and tool development on [Discord](https://discord.gg/fEpwjsEj8P); bugs and requests in the [issues](https://github.com/M45K/open500/issues).
 
 **Website & installer:** `docs/index.html` (GitHub Pages) — drop the official OS 1.31 file in the page and it adds
 the Open500 loader in your browser. Nothing is uploaded, and this repository contains no Akai code.
