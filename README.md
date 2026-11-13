@@ -1,3 +1,5 @@
+<img src="docs/logo.svg" alt="Open500 logo" width="96" align="right">
+
 # Open500
 
 [![Support Open500](https://img.shields.io/badge/Support-PayPal-0070ba?logo=paypal)](https://paypal.me/SupportOpen500)
